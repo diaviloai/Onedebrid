@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        Base theme for OneDebrid.
+
+        This theme exists solely to satisfy the Android manifest requirement
+        and to configure the Activity window before Compose takes over rendering.
+
+        It intentionally contains no colour or typography definitions.
+        All Material You theming — including Dynamic Color — is handled entirely
+        in Compose via MaterialTheme and dynamicColorScheme().
+
+        Theme.Material3.DayNight.NoActionBar is used because:
+        - Material3: aligns with the Material 3 design system
+        - DayNight: automatically switches between light and dark based on system setting
+        - NoActionBar: removes the legacy XML toolbar so Compose manages the full window
+    -->
+    <style name="Theme.OneDebrid" parent="Theme.Material3.DayNight.NoActionBar" />
+
+</resources>

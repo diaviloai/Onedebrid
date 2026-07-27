@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required for all network communication:
+         Real-Debrid API, metadata providers, subtitle providers, stream resolution. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Required for Media3/ExoPlayer to continue playback when the app is backgrounded.
+         Without this, Android will terminate the playback process. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- Declares the specific type of foreground service. Required on API 29+.
+         MEDIA_PLAYBACK tells the system this service is for audio/video playback,
+         which affects how Android prioritizes and displays it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <!-- Required on API 33+ (Android 13+) to post the playback notification
+         that the foreground service must display to remain active. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".OneDebridApplication"
+        android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OneDebrid">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>
