@@ -8,6 +8,12 @@ package com.onedebrid.app.domain.model
  *
  * Preferences are grouped into focused objects so that each subsystem receives
  * only the slice of preferences it needs, rather than the entire profile.
+ *
+ * providerPriorities: Maps provider type (e.g. "debrid", "metadata", "search",
+ * "subtitle") to an ordered list of provider IDs, highest priority first.
+ * An empty list for a given type means no explicit priority — the coordinator
+ * uses whatever registered providers are available.
+ * An absent key is equivalent to an empty list.
  */
 data class UserProfile(
     val id: String,
@@ -16,7 +22,8 @@ data class UserProfile(
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val subtitles: SubtitlePreferences = SubtitlePreferences(),
     val search: SearchPreferences = SearchPreferences(),
-    val theme: ThemePreferences = ThemePreferences()
+    val theme: ThemePreferences = ThemePreferences(),
+    val providerPriorities: Map<String, List<String>> = emptyMap()
 )
 
 /**
