@@ -49,10 +49,14 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Room schema export for migration testing
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
 }
 
 dependencies {
-
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
