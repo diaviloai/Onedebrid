@@ -19,7 +19,7 @@ interface DownloadDao {
      */
     @Query("""
         SELECT * FROM downloads
-        ORDER BY queuedAt DESC
+        ORDER BY createdAt DESC
     """)
     fun observeAllDownloads(): Flow<List<DownloadEntity>>
 
@@ -31,7 +31,7 @@ interface DownloadDao {
     @Query("""
         SELECT * FROM downloads
         WHERE status IN ('QUEUED', 'DOWNLOADING', 'PAUSED')
-        ORDER BY queuedAt ASC
+        ORDER BY createdAt ASC
     """)
     fun observeActiveDownloads(): Flow<List<DownloadEntity>>
 
