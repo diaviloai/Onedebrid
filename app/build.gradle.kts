@@ -63,6 +63,9 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    
+    // Material Design - required for XML theme (Theme.Material3.DayNight.NoActionBar)
+implementation(libs.material)
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
