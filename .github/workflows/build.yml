@@ -20,13 +20,13 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Gradle 8.11.1
+      - name: Install Gradle 8.13
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.11.1'
+          gradle-version: '8.13'
 
       - name: Regenerate Gradle wrapper
-        run: gradle wrapper --gradle-version=8.11.1
+        run: gradle wrapper --gradle-version=8.13
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
