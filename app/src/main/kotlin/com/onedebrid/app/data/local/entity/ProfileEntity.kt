@@ -24,26 +24,21 @@ data class ProfileEntity(
 
     val isDefault: Boolean,
 
-    // PlaybackPreferences
     val playbackPreferredQuality: VideoQuality,
     val playbackPreferredAudioLanguage: String,
     val playbackAutoPlay: Boolean,
 
-    // SubtitlePreferences
     val subtitlesEnabled: Boolean,
     val subtitlesPreferredLanguageCode: String,
     val subtitlesPreferredFormat: SubtitleFormat?,
     val subtitlesHearingImpaired: Boolean,
 
-    // SearchPreferences
     val searchIncludeAdult: Boolean,
     val searchPreferredContentLanguage: String,
 
-    // ThemePreferences
     val themeUseDynamicColor: Boolean,
     val themeDarkMode: Boolean?,
 
-    // Provider priorities — stored as JSON via TypeConverters
     val providerPriorities: Map<String, List<String>>
 ) {
 
@@ -84,4 +79,19 @@ data class ProfileEntity(
             name = profile.name,
             isActive = isActive,
             createdAt = createdAt,
-            isDefault = pro
+            isDefault = profile.isDefault,
+            playbackPreferredQuality = profile.playback.preferredQuality,
+            playbackPreferredAudioLanguage = profile.playback.preferredAudioLanguage,
+            playbackAutoPlay = profile.playback.autoPlay,
+            subtitlesEnabled = profile.subtitles.enabled,
+            subtitlesPreferredLanguageCode = profile.subtitles.preferredLanguageCode,
+            subtitlesPreferredFormat = profile.subtitles.preferredFormat,
+            subtitlesHearingImpaired = profile.subtitles.hearingImpaired,
+            searchIncludeAdult = profile.search.includeAdult,
+            searchPreferredContentLanguage = profile.search.preferredContentLanguage,
+            themeUseDynamicColor = profile.theme.useDynamicColor,
+            themeDarkMode = profile.theme.darkMode,
+            providerPriorities = profile.providerPriorities
+        )
+    }
+}
