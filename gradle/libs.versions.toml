@@ -7,7 +7,7 @@ ksp = "2.3.9"
 datastore = "1.2.1"
 
 # Dependency injection
-hilt = "2.59.2"
+hilt = "2.58"
 
 # UI
 composeBom = "2026.04.01"
