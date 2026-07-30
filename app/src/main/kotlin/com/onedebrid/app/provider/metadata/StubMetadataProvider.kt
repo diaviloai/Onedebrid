@@ -1,9 +1,9 @@
 package com.onedebrid.app.provider.metadata
 
 import com.onedebrid.app.domain.error.ProviderError
+import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
-import com.onedebrid.app.domain.error.ProviderResult
 import javax.inject.Inject
 
 class StubMetadataProvider @Inject constructor() : MetadataProvider {

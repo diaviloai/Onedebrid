@@ -1,13 +1,14 @@
 package com.onedebrid.app.provider.debrid
 
 import com.onedebrid.app.domain.error.ProviderError
+import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.StreamSource
-import com.onedebrid.app.provider.ProviderResult
 import javax.inject.Inject
 
 class StubDebridProvider @Inject constructor() : DebridProvider {
 
     override val id: String = "stub_debrid"
+    override val displayName: String = "Stub Debrid"
 
     override suspend fun verifyAccount(): ProviderResult<AccountInfo> =
         ProviderResult.Failure(ProviderError.ServiceUnavailable)

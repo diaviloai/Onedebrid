@@ -1,13 +1,14 @@
 package com.onedebrid.app.provider.search
 
 import com.onedebrid.app.domain.error.ProviderError
+import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.SearchResult
-import com.onedebrid.app.provider.ProviderResult
 import javax.inject.Inject
 
 class StubSearchProvider @Inject constructor() : SearchProvider {
 
     override val id: String = "stub_search"
+    override val displayName: String = "Stub Search"
 
     override suspend fun search(
         query: String,
