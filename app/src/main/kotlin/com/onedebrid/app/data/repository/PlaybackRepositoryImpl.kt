@@ -70,11 +70,15 @@ class PlaybackRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markAsCompleted(
-        profileId: String,
-        mediaId: String
-    ): Unit = withContext(dispatchers.io) {
-        continueWatchingDao.markAsCompleted(profileId, mediaId)
-    }
+    profileId: String,
+    mediaId: String
+): Unit = withContext(dispatchers.io) {
+    continueWatchingDao.markAsCompleted(
+        profileId = profileId,
+        mediaId = mediaId,
+        completedAt = System.currentTimeMillis()
+    )
+}
 
     // --- Recently Played ---
 
