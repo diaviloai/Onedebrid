@@ -1,4 +1,4 @@
-package com.onedebrid.app.data.repository
+package com.onedebrid.app.data.local.dao
 
 import com.onedebrid.app.data.local.dao.ContinueWatchingDao
 import com.onedebrid.app.data.local.dao.RecentlyPlayedDao
