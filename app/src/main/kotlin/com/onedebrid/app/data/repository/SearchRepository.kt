@@ -11,17 +11,19 @@ import kotlinx.coroutines.flow.Flow
  *
  * Search history is user-configurable and may be cleared at any time,
  * as required by the database design specification.
+ *
+ * All operations are profile-scoped — history belongs to a profile,
+ * not to the application globally.
  */
 interface SearchRepository {
 
     /**
-     * Observe the current search history.
+     * Observe the current search history for a profile.
      *
      * Emits a new list whenever history changes.
      * Ordered by most recent first.
-     * Respects the active profile — history is per-profile.
      */
-    fun observeSearchHistory(): Flow<List<String>>
+    fun observeSearchHistory(profileId: String): Flow<List<String>>
 
     /**
      * Add a query to search history.
@@ -29,8 +31,6 @@ interface SearchRepository {
      * Called after a search is successfully executed.
      * If the query already exists in history, it is moved to the
      * top rather than duplicated.
-     *
-     * [profileId] ensures history is stored against the correct profile.
      */
     suspend fun addSearchQuery(query: String, profileId: String)
 

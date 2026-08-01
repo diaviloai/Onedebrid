@@ -296,7 +296,7 @@ More efficient than @Provides; no runtime overhead.
 
 ## Key Version Numbers
 - AGP: 8.13.2
-- Kotlin: 2.3.20
+- : 2.3.20
 - KSP: 2.3.9
 - Hilt: 2.58
 - Compose BOM: 2026.04.01

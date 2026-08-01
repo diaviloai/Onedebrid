@@ -1,6 +1,6 @@
 package com.onedebrid.app.data.repository
 
-import com.onedebrid.app.domain.model.Media
+import com.onedebrid.app.domain.model.WatchedItem
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.Flow
  *
  * Owned by the Playback System. Handles Continue Watching,
  * per-item progress, and recently played history.
+ *
+ * Returns WatchedItem rather than Media — the repository only holds what
+ * the local database knows (IDs, progress, timestamps). Callers are
+ * responsible for fetching full Media metadata using the mediaId.
  */
 interface PlaybackRepository {
 
@@ -18,10 +22,9 @@ interface PlaybackRepository {
      *
      * Emits a new list whenever any item's progress changes.
      * Items are ordered by most recently watched first.
-     * Only includes items with meaningful progress that are not
-     * yet complete.
+     * Only includes items with meaningful progress that are not yet complete.
      */
-    fun observeContinueWatching(): Flow<List<Media>>
+    fun observeContinueWatching(profileId: String): Flow<List<WatchedItem>>
 
     /**
      * Remove a specific item from Continue Watching.
@@ -29,7 +32,7 @@ interface PlaybackRepository {
      * Called when the user explicitly dismisses an item or when
      * playback reaches completion.
      */
-    suspend fun removeFromContinueWatching(mediaId: String)
+    suspend fun removeFromContinueWatching(profileId: String, mediaId: String)
 
     // --- Playback Progress ---
 
@@ -48,6 +51,7 @@ interface PlaybackRepository {
      * calculate completion percentage.
      */
     suspend fun saveProgress(
+        profileId: String,
         mediaId: String,
         episodeId: String?,
         positionMs: Long,
@@ -57,38 +61,55 @@ interface PlaybackRepository {
     /**
      * Retrieve the last saved playback position for a media item.
      *
-     * Returns null if no progress has been saved yet.
+     * Returns null inside Success if no progress has been saved yet.
      * [episodeId] is null for movies.
      */
     suspend fun getProgress(
+        profileId: String,
         mediaId: String,
         episodeId: String?
     ): RepositoryResult<Long?>
 
+    /**
+     * Mark a media item as completed in Continue Watching.
+     *
+     * Called when playback reaches the completion threshold (typically ~90%).
+     */
+    suspend fun markAsCompleted(profileId: String, mediaId: String)
+
     // --- Recently Played ---
 
     /**
-     * Observe the recently played list.
+     * Observe the recently played list for a profile.
      *
      * Emits a new list whenever an item is added.
      * Ordered by most recently played first.
      * Includes all played items, including completed ones.
      */
-    fun observeRecentlyPlayed(): Flow<List<Media>>
+    fun observeRecentlyPlayed(profileId: String): Flow<List<WatchedItem>>
 
     /**
      * Record that a media item was played.
      *
      * Called when playback starts. Distinct from saveProgress —
-     * this just records that the item was opened, regardless of
-     * how far the user got.
+     * this records that the item was opened regardless of how far
+     * the user got.
+     *
+     * For TV episodes, episodeId, seasonNumber, and episodeNumber
+     * identify which episode was opened.
      */
-    suspend fun recordPlayed(mediaId: String)
+    suspend fun recordPlayed(
+        profileId: String,
+        mediaId: String,
+        episodeId: String? = null,
+        seasonNumber: Int? = null,
+        episodeNumber: Int? = null
+    )
 
     /**
-     * Clear all playback history.
+     * Clear all playback history for a profile.
      *
      * User-initiated. Clears both Continue Watching and Recently Played.
      */
-    suspend fun clearHistory()
+    suspend fun clearHistory(profileId: String)
 }
