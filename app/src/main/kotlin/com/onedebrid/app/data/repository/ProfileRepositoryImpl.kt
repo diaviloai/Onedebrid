@@ -21,16 +21,11 @@ class ProfileRepositoryImpl @Inject constructor(
 
     // --- Observation ---
 
-    override fun observeAllProfiles(): Flow<List<UserProfile>> =
+    override fun observeProfiles(): Flow<List<UserProfile>> =
         profileDao.observeAllProfiles()
             .map { entities -> entities.map { it.toDomain() } }
             .flowOn(dispatchers.io)
 
-    /**
-     * ProfileDao returns Flow<ProfileEntity?> because Room cannot guarantee
-     * a row exists. We filter nulls here — a missing active profile is a bug,
-     * not a valid state, so we never surface null to callers.
-     */
     override fun observeActiveProfile(): Flow<UserProfile> =
         profileDao.observeActiveProfile()
             .filterNotNull()
@@ -39,29 +34,15 @@ class ProfileRepositoryImpl @Inject constructor(
 
     // --- One-shot reads ---
 
-    override suspend fun getActiveProfile(): RepositoryResult<UserProfile> =
+    override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> =
         withContext(dispatchers.io) {
-            val entity = profileDao.getActiveProfile()
+            val entity = profileDao.getProfileById(profileId)
             if (entity != null) {
                 RepositoryResult.Success(entity.toDomain())
             } else {
                 RepositoryResult.Failure(
                     AppError.LocalStorageError(
-                        cause = Exception("No active profile found")
-                    )
-                )
-            }
-        }
-
-    override suspend fun getProfileById(id: String): RepositoryResult<UserProfile> =
-        withContext(dispatchers.io) {
-            val entity = profileDao.getProfileById(id)
-            if (entity != null) {
-                RepositoryResult.Success(entity.toDomain())
-            } else {
-                RepositoryResult.Failure(
-                    AppError.LocalStorageError(
-                        cause = Exception("Profile not found: $id")
+                        cause = Exception("Profile not found: $profileId")
                     )
                 )
             }
@@ -69,41 +50,35 @@ class ProfileRepositoryImpl @Inject constructor(
 
     // --- Writes ---
 
-    override suspend fun createProfile(profile: UserProfile): RepositoryResult<Unit> =
+    override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> =
         withContext(dispatchers.io) {
             runCatching {
                 profileDao.insertProfile(ProfileEntity.fromDomain(profile))
             }.fold(
-                onSuccess = { RepositoryResult.Success(Unit) },
+                onSuccess = { RepositoryResult.Success(profile) },
                 onFailure = { cause ->
                     RepositoryResult.Failure(AppError.LocalStorageError(cause))
                 }
             )
         }
 
-    override suspend fun updateProfile(profile: UserProfile): RepositoryResult<Unit> =
+    override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> =
         withContext(dispatchers.io) {
             runCatching {
                 profileDao.updateProfile(ProfileEntity.fromDomain(profile))
             }.fold(
-                onSuccess = { RepositoryResult.Success(Unit) },
+                onSuccess = { RepositoryResult.Success(profile) },
                 onFailure = { cause ->
                     RepositoryResult.Failure(AppError.LocalStorageError(cause))
                 }
             )
         }
 
-    /**
-     * Switches the active profile atomically: deactivate all first, then
-     * activate the target. Both operations run sequentially on the IO
-     * dispatcher. A Room transaction can be added to ProfileDao later if
-     * stricter atomicity is needed.
-     */
-    override suspend fun setActiveProfile(id: String): RepositoryResult<Unit> =
+    override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
         withContext(dispatchers.io) {
             runCatching {
                 profileDao.deactivateAllProfiles()
-                profileDao.setProfileActive(id)
+                profileDao.setProfileActive(profileId)
             }.fold(
                 onSuccess = { RepositoryResult.Success(Unit) },
                 onFailure = { cause ->
@@ -112,14 +87,10 @@ class ProfileRepositoryImpl @Inject constructor(
             )
         }
 
-    /**
-     * Active profile deletion is rejected here at the repository layer.
-     * The DAO has no awareness of business rules — enforcement belongs here.
-     */
-    override suspend fun deleteProfile(id: String): RepositoryResult<Unit> =
+    override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> =
         withContext(dispatchers.io) {
             val active = profileDao.getActiveProfile()
-            if (active?.id == id) {
+            if (active?.id == profileId) {
                 return@withContext RepositoryResult.Failure(
                     AppError.LocalStorageError(
                         cause = Exception("Cannot delete the active profile")
@@ -127,17 +98,12 @@ class ProfileRepositoryImpl @Inject constructor(
                 )
             }
             runCatching {
-                profileDao.deleteProfile(id)
+                profileDao.deleteProfile(profileId)
             }.fold(
                 onSuccess = { RepositoryResult.Success(Unit) },
                 onFailure = { cause ->
                     RepositoryResult.Failure(AppError.LocalStorageError(cause))
                 }
             )
-        }
-
-    override suspend fun getProfileCount(): Int =
-        withContext(dispatchers.io) {
-            profileDao.getProfileCount()
         }
 }
