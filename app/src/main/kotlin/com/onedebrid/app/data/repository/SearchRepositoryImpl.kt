@@ -1,77 +1,48 @@
 package com.onedebrid.app.data.repository
 
-import com.onedebrid.app.domain.model.PlaybackRequest
-import com.onedebrid.app.domain.model.PlaybackSession
-import com.onedebrid.app.domain.model.PlaybackState
-import com.onedebrid.app.domain.model.SearchSession
-import com.onedebrid.app.domain.model.SessionState
-import com.onedebrid.app.domain.model.StreamSource
-import com.onedebrid.app.domain.model.UserProfile
+import com.onedebrid.app.data.local.dao.SearchHistoryDao
+import com.onedebrid.app.data.local.entity.SearchHistoryEntity
+import com.onedebrid.app.di.CoroutineDispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SessionRepositoryImpl @Inject constructor() : SessionRepository {
+class SearchRepositoryImpl @Inject constructor(
+    private val searchHistoryDao: SearchHistoryDao,
+    private val dispatchers: CoroutineDispatchers
+) : SearchRepository {
 
-    private val _session = MutableStateFlow<SessionState?>(null)
+    override fun observeSearchHistory(profileId: String): Flow<List<String>> =
+        searchHistoryDao.observeSearchHistory(profileId)
+            .map { entities -> entities.map { it.query } }
+            .flowOn(dispatchers.io)
 
-    fun initialise(profile: UserProfile) {
-        _session.value = SessionState(activeProfile = profile)
-    }
-
-    override fun observeSession(): Flow<SessionState> =
-        _session.asStateFlow().filterNotNull()
-
-    override suspend fun startPlaybackSession(
-        request: PlaybackRequest,
-        stream: StreamSource
-    ) {
-        _session.value = _session.value?.copy(
-            playback = PlaybackSession(
-                media = request.media,
-                episode = request.episode,
-                streamSource = stream,
-                positionMs = request.resumePositionMs ?: 0L,
-                state = PlaybackState.IDLE
-            )
-        )
-    }
-
-    override suspend fun updatePlaybackPosition(positionMs: Long) {
-        val current = _session.value ?: return
-        val currentPlayback = current.playback ?: return
-        _session.value = current.copy(
-            playback = currentPlayback.copy(positionMs = positionMs)
-        )
-    }
-
-    override suspend fun endPlaybackSession() {
-        _session.value = _session.value?.copy(playback = null)
-    }
-
-    override suspend fun updateSearchSession(
+    override suspend fun addSearchQuery(
         query: String,
-        filters: Map<String, String>
-    ) {
-        val current = _session.value ?: return
-        _session.value = current.copy(
-            search = SearchSession(
-                query = query,
-                results = current.search?.results ?: emptyList(),
-                isLoading = false
-            )
+        profileId: String
+    ): Unit = withContext(dispatchers.io) {
+        val entity = SearchHistoryEntity(
+            profileId = profileId,
+            query = query,
+            searchedAt = System.currentTimeMillis()
         )
+        searchHistoryDao.upsertQuery(entity)
     }
 
-    override suspend fun clearSearchSession() {
-        _session.value = _session.value?.copy(search = null)
+    override suspend fun removeSearchQuery(
+        query: String,
+        profileId: String
+    ): Unit = withContext(dispatchers.io) {
+        searchHistoryDao.removeQuery(profileId, query)
     }
 
-    override suspend fun clearSession() {
-        _session.value = null
+    override suspend fun clearSearchHistory(
+        profileId: String
+    ): Unit = withContext(dispatchers.io) {
+        searchHistoryDao.clearHistoryForProfile(profileId)
     }
 }
