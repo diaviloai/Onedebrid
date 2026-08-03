@@ -44,7 +44,7 @@ interface MediaRepository {
      */
     suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource>
 
-    /**
+/**
      * Check cache status for multiple candidates at once.
      *
      * Batching is important here — checking candidates one at a time would
@@ -55,4 +55,17 @@ interface MediaRepository {
      * Does not resolve streams — use resolveStream() for that.
      */
     suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>>
+
+    /**
+     * Search for media matching the given query.
+     *
+     * Delegates to the configured SearchProvider(s). With stub providers
+     * in place this will always return AllProvidersUnavailable — that is
+     * expected until real providers are wired in.
+     *
+     * profileId is included so that future provider priority logic can
+     * consult the active profile's providerPriorities when selecting
+     * which search providers to query.
+     */
+    suspend fun search(query: String, profileId: String): RepositoryResult<SearchResult>
 }

@@ -1,0 +1,14 @@
+package com.onedebrid.app.usecase
+
+import com.onedebrid.app.data.repository.ProfileRepository
+import com.onedebrid.app.domain.model.UserProfile
+import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
+
+class GetProfilesUseCase @Inject constructor(
+    private val profileRepository: ProfileRepository
+) {
+
+    operator fun invoke(): Flow<List<UserProfile>> =
+        profileRepository.observeProfiles()
+}

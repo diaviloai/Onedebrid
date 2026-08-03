@@ -47,6 +47,22 @@ class ProfileRepositoryImpl @Inject constructor(
                 )
             }
         }
+    
+    override suspend fun getActiveProfile(): RepositoryResult<UserProfile> =
+    withContext(dispatchers.io) {
+        try {
+            val entity = profileDao.getActiveProfile()
+            if (entity != null) {
+                RepositoryResult.Success(entity.toDomain())
+            } else {
+                RepositoryResult.Failure(AppError.LocalStorageError(
+                    IllegalStateException("No active profile found")
+                ))
+            }
+        } catch (e: Exception) {
+            RepositoryResult.Failure(AppError.LocalStorageError(e))
+        }
+    }
 
     // --- Writes ---
 

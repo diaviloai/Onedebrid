@@ -14,6 +14,8 @@ import com.onedebrid.app.provider.metadata.MetadataProvider
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.onedebrid.app.domain.model.SearchResult
+import com.onedebrid.app.provider.search.SearchProvider
 
 /**
  * Backed by stub providers until real provider implementations exist.
@@ -25,6 +27,7 @@ import javax.inject.Singleton
 class MediaRepositoryImpl @Inject constructor(
     private val metadataProvider: MetadataProvider,
     private val debridProvider: DebridProvider,
+    private val searchProvider: SearchProvider,
     private val dispatchers: CoroutineDispatchers
 ) : MediaRepository {
 
@@ -67,6 +70,14 @@ class MediaRepositoryImpl @Inject constructor(
             debridProvider.checkCache(hashes).toRepositoryResult()
         }
 
+override suspend fun search(
+        query: String,
+        profileId: String
+    ): RepositoryResult<SearchResult> =
+        withContext(dispatchers.io) {
+            searchProvider.search(query).toRepositoryResult()
+        }
+        
     // --- ProviderResult → RepositoryResult translation ---
 
     private fun <T> ProviderResult<T>.toRepositoryResult(): RepositoryResult<T> =
