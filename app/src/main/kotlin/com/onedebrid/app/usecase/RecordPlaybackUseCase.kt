@@ -13,8 +13,6 @@ class RecordPlaybackUseCase @Inject constructor(
     suspend operator fun invoke(
         profileId: String,
         mediaId: String,
-        positionMs: Long,
-        durationMs: Long,
         episodeId: String? = null,
         seasonNumber: Int? = null,
         episodeNumber: Int? = null
@@ -23,8 +21,6 @@ class RecordPlaybackUseCase @Inject constructor(
             playbackRepository.recordPlayed(
                 profileId = profileId,
                 mediaId = mediaId,
-                positionMs = positionMs,
-                durationMs = durationMs,
                 episodeId = episodeId,
                 seasonNumber = seasonNumber,
                 episodeNumber = episodeNumber

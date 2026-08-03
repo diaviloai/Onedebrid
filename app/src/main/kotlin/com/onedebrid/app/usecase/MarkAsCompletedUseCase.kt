@@ -12,14 +12,12 @@ class MarkAsCompletedUseCase @Inject constructor(
 
     suspend operator fun invoke(
         profileId: String,
-        mediaId: String,
-        episodeId: String? = null
+        mediaId: String
     ) {
         withContext(dispatchers.io) {
             playbackRepository.markAsCompleted(
                 profileId = profileId,
-                mediaId = mediaId,
-                episodeId = episodeId
+                mediaId = mediaId
             )
         }
     }
