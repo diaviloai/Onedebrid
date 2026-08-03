@@ -2,7 +2,7 @@
 
 ## Status
 Implementation in progress. Architectural design phase complete.
-Build verification complete — project compiles cleanly as of Session 13.
+Build verification complete — project compiles cleanly as of Session 14.
 
 ## Package Structure
 com.onedebrid.app
@@ -42,6 +42,8 @@ com.onedebrid.app
 - app/src/main/res/values/themes.xml
 - gradle/wrapper/gradle-wrapper.properties + gradlew + gradlew.bat
 - app/src/main/kotlin/com/onedebrid/app/OneDebridApplication.kt
+- OneDebridApplication.kt — updated Session 14: injects SessionCoordinator,
+  calls start() in onCreate()
 - app/src/main/kotlin/com/onedebrid/app/MainActivity.kt
 
 ### Domain Models (Session 3)
@@ -97,9 +99,11 @@ com.onedebrid.app
   returns RepositoryResult<UserProfile>, updateProfile() returns
   RepositoryResult<UserProfile>, deleteProfile(), observeActiveProfile(),
   setActiveProfile(), getActiveProfile() added Session 11
-- SessionRepository.kt — in-memory only; observeSession(), startPlaybackSession(),
-  updatePlaybackPosition(), endPlaybackSession(), updateSearchSession(),
-  clearSearchSession(), clearSession()
+- SessionRepository.kt — in-memory only; initialise() added Session 14
+  (non-suspend); observeSession() returns Flow<SessionState> (not nullable —
+  filters internally); startPlaybackSession(request: PlaybackRequest,
+  stream: StreamSource), updatePlaybackPosition(), endPlaybackSession(),
+  updateSearchSession(), clearSearchSession(), clearSession() — all suspend
 - SearchRepository.kt — updated Session 10: observeSearchHistory() takes
   profileId; addSearchQuery(), removeSearchQuery(), clearSearchHistory()
 
@@ -156,7 +160,8 @@ com.onedebrid.app
 - SearchRepositoryImpl.kt — backed by SearchHistoryDao; returns
   List<String> query strings
 - SessionRepositoryImpl.kt — in-memory MutableStateFlow<SessionState?>;
-  initialise(profile) called by Session Coordinator; no DAO
+  initialise(profile) implements SessionRepository interface (override
+  added Session 14); called by SessionCoordinator.start(); no DAO
 - MediaRepositoryImpl.kt — backed by MetadataProvider, DebridProvider, and
   SearchProvider stubs; search() added Session 12; translates ProviderResult
   to RepositoryResult
@@ -221,6 +226,24 @@ com.onedebrid.app
   wraps session call because failure here blocks playback and the ViewModel
   needs a structured result to act on
 
+### Coordinators (Session 14)
+- SessionCoordinator.kt — @Singleton; observes ProfileRepository
+  .observeActiveProfile(), calls sessionRepository.initialise() on each
+  distinct non-null emission; start() must be called once from
+  OneDebridApplication.onCreate()
+- PlaybackCoordinator.kt — @Singleton; owns play()/stop() workflow;
+  sequences ResolvePlaybackUseCase → StartPlaybackUseCase →
+  RecordPlaybackUseCase; exposes StateFlow<PlaybackState>
+  (Idle/Resolving/Ready/Error); cancels prior job on new play() call
+- SearchCoordinator.kt — @Singleton; owns search()/clear() workflow;
+  wraps SearchMediaUseCase; exposes StateFlow<SearchState>
+  (Idle/Searching/Results/Error); cancels prior job on new search() call
+
+### DI Infrastructure (Session 14)
+- ApplicationScope.kt — @Qualifier annotation; lives in di/
+- ApplicationScopeModule.kt — provides @ApplicationScope CoroutineScope
+  backed by SupervisorJob() + dispatchers.default; @Singleton
+
 ## Implementation Decisions
 
 ### WatchedItem introduced as lightweight playback record
@@ -264,14 +287,21 @@ stream resolution. SearchRepository owns history persistence only. Adding
 search() to MediaRepository keeps the boundary clean without introducing
 a new interface.
 
+### SessionRepository interface written without checking impl first (Session 14)
+When adding initialise() to the SessionRepository interface, the interface
+was written independently rather than checked against the existing
+SessionRepositoryImpl. This caused a second build failure — suspend
+modifiers and startPlaybackSession's signature didn't match between
+interface and impl. Fixed by conforming the interface to the impl's
+already-working design rather than the reverse. Lesson: when changing an
+interface that already has an implementation, read the implementation
+file first, every time — no exceptions.
+
 ## Open TODOs
 - OneDebridTheme needs static fallback colour scheme for API 26-30
 - App icon: placeholder system drawable in AndroidManifest.xml
 - SearchRepository.updateSearchSession uses Map<String, String> for filters;
   revisit if SearchFilters promoted to domain model
-- SessionRepositoryImpl.initialise() is not part of the public interface;
-  Session Coordinator must cast to SessionRepositoryImpl to call it, or
-  the interface needs an initialise() method added
 - AppError has no ValidationError case; CreateProfileUseCase and
   UpdateProfileUseCase use LocalStorageError(IllegalArgumentException)
   for blank name validation — semantically incorrect; revisit when
@@ -280,10 +310,10 @@ a new interface.
   tidy to a top-level import if preferred
 
 ## Next Steps
-1. Coordinators — PlaybackCoordinator and SearchCoordinator; these own
-   long-running orchestration across multiple Use Cases
-2. ViewModels — search or profile management as natural first candidates
+1. ViewModels — search or profile management as natural first candidates
    since both are fully local and don't depend on real providers
+2. Before further Coordinator or Repository changes: verify Media.id and
+   Episode.id usage is consistent everywhere they're referenced
 
 ## Key Version Numbers
 - AGP: 8.13.2
