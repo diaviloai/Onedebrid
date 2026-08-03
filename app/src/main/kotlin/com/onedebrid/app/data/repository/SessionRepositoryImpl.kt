@@ -19,7 +19,7 @@ class SessionRepositoryImpl @Inject constructor() : SessionRepository {
 
     private val _session = MutableStateFlow<SessionState?>(null)
 
-    fun initialise(profile: UserProfile) {
+    override fun initialise(profile: UserProfile) {
         _session.value = SessionState(activeProfile = profile)
     }
 

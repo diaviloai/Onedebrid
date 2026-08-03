@@ -1,9 +1,9 @@
 package com.onedebrid.app.coordinator
 
-import com.onedebrid.app.data.repository.AppError
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.di.ApplicationScope
 import com.onedebrid.app.di.CoroutineDispatchers
+import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
@@ -45,7 +45,6 @@ class PlaybackCoordinator @Inject constructor(
      * Begin the playback workflow for the given request.
      *
      * Cancels any in-progress resolution before starting.
-     * Emits state transitions as the workflow progresses.
      */
     fun play(request: PlaybackRequest, profileId: String) {
         activeJob?.cancel()
@@ -56,12 +55,12 @@ class PlaybackCoordinator @Inject constructor(
                 is RepositoryResult.Success -> {
                     val source = result.data
 
-                    when (val sessionResult = startPlaybackUseCase(source)) {
+                    when (val sessionResult = startPlaybackUseCase(request, source)) {
                         is RepositoryResult.Success -> {
                             recordPlaybackUseCase(
                                 profileId = profileId,
-                                mediaId = request.mediaId,
-                                episodeId = request.episodeId
+                                mediaId = request.media.id,
+                                episodeId = request.episode?.id
                             )
                             _state.value = PlaybackState.Ready(source)
                         }
@@ -79,8 +78,6 @@ class PlaybackCoordinator @Inject constructor(
 
     /**
      * Stop the current playback session and reset state.
-     *
-     * Called when the user exits the player or playback ends naturally.
      */
     fun stop() {
         activeJob?.cancel()
@@ -88,9 +85,6 @@ class PlaybackCoordinator @Inject constructor(
     }
 }
 
-/**
- * Represents the current state of the playback workflow.
- */
 sealed interface PlaybackState {
     data object Idle : PlaybackState
     data object Resolving : PlaybackState

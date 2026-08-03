@@ -1,6 +1,6 @@
 package com.onedebrid.app.coordinator
 
-import com.onedebrid.app.data.repository.AppError
+import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.di.ApplicationScope
 import com.onedebrid.app.di.CoroutineDispatchers
