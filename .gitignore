@@ -29,3 +29,11 @@ Thumbs.db
 
 # Kotlin
 *.class
+
+# Editor / environment artifacts (Spck)
+node-compile-cache/
+phantomjs/
+rclone-mounts/
+rclone-mount-config.json
+*.lock
+uv-*.lock
