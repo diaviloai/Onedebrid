@@ -11,6 +11,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -45,14 +46,12 @@ class HomeViewModel @Inject constructor(
     private val _activeProfile = MutableStateFlow<UserProfile?>(null)
 
     init {
-        viewModelScope.launch {
-            getActiveProfileUseCase()
-                .onEach { profile ->
-                    _activeProfile.value = profile
-                    observeContinueWatching(profile.id)
-                }
-                .collect()
-        }
+        getActiveProfileUseCase()
+            .onEach { profile ->
+                _activeProfile.value = profile
+                observeContinueWatching(profile.id)
+            }
+            .launchIn(viewModelScope)
     }
 
     private var continueWatchingJob: kotlinx.coroutines.Job? = null
@@ -61,16 +60,14 @@ class HomeViewModel @Inject constructor(
         // Re-scope observation whenever the active profile changes, same
         // as SearchViewModel re-scopes search history on profile switch.
         continueWatchingJob?.cancel()
-        continueWatchingJob = viewModelScope.launch {
-            getContinueWatchingUseCase(profileId)
-                .onEach { items ->
-                    _uiState.value = _uiState.value.copy(
-                        continueWatching = items,
-                        isLoading = false
-                    )
-                }
-                .collect()
-        }
+        continueWatchingJob = getContinueWatchingUseCase(profileId)
+            .onEach { items ->
+                _uiState.value = _uiState.value.copy(
+                    continueWatching = items,
+                    isLoading = false
+                )
+            }
+            .launchIn(viewModelScope)
     }
 
     /**
