@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">OneDebrid</string>
+
+    <!-- Player screen -->
+    <string name="player_resolving">Finding the best stream…</string>
+    <string name="player_retry">Retry</string>
+    <string name="player_error_no_cached_stream">No cached stream is available for this title right now.</string>
+    <string name="player_error_resolution_failed">Couldn\'t start this stream. Please try again.</string>
+    <string name="player_error_not_authenticated">Your debrid account needs to be reconnected.</string>
+    <string name="player_error_no_network">No network connection. Check your connection and try again.</string>
+    <string name="player_error_providers_unavailable">All providers are unavailable right now. Please try again shortly.</string>
+    <string name="player_error_generic">Something went wrong. Please try again.</string>
 </resources>
