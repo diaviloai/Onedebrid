@@ -122,4 +122,181 @@ fun PlayerScreen(
     // reports Ready. Re-keying on the source id (not the whole state)
     // avoids reloading the same media if this recomposes for unrelated
     // reasons (e.g. playerLifecycleState changing).
-    val
+    val coordinatorState = uiState.coordinatorState
+    if (coordinatorState is CoordinatorState.Ready) {
+        DisposableEffect(coordinatorState.source.id) {
+            val mediaItem = MediaItem.fromUri(coordinatorState.source.url)
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+            onDispose { }
+        }
+    }
+
+    // Mirror ExoPlayer's own lifecycle into PlayerViewModel so the rest of
+    // the app (Continue Watching, session end) reflects what is actually
+    // happening in the player, not just the resolve/start outcome.
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                val mapped = when (playbackState) {
+                    Player.STATE_IDLE -> PlayerLifecycleState.IDLE
+                    Player.STATE_BUFFERING -> PlayerLifecycleState.BUFFERING
+                    Player.STATE_READY -> {
+                        if (exoPlayer.isPlaying) PlayerLifecycleState.PLAYING
+                        else PlayerLifecycleState.PAUSED
+                    }
+                    Player.STATE_ENDED -> PlayerLifecycleState.ENDED
+                    else -> PlayerLifecycleState.IDLE
+                }
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val mapped = if (isPlaying) {
+                    PlayerLifecycleState.PLAYING
+                } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
+                    PlayerLifecycleState.ENDED
+                } else {
+                    PlayerLifecycleState.PAUSED
+                }
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition)
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                viewModel.onPlayerStateChanged(PlayerLifecycleState.ERROR, exoPlayer.currentPosition)
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        when (coordinatorState) {
+            is CoordinatorState.Idle,
+            is CoordinatorState.Resolving -> ResolvingContent()
+
+            is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
+
+            is CoordinatorState.Error -> ErrorContent(
+                error = coordinatorState.error,
+                onRetry = { viewModel.play(pending.request, pending.profileId) }
+            )
+        }
+    }
+}
+
+/**
+ * The actual video surface, shown once CoordinatorState is Ready.
+ *
+ * PlayerView is a classic Android View (Media3 has no Compose-native
+ * player surface as of media3 1.6.1), so it is embedded via AndroidView
+ * per the standard Compose interop pattern.
+ */
+@Composable
+private fun PlayerSurface(exoPlayer: ExoPlayer) {
+    AndroidView(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 9f),
+        factory = { context ->
+            PlayerView(context).apply {
+                player = exoPlayer
+                useController = true
+            }
+        }
+    )
+}
+
+@Composable
+private fun ResolvingContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        CircularProgressIndicator()
+        Text(
+            text = stringResource(R.string.player_resolving),
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+/**
+ * Error presentation, split by AppError.isRecoverable per the severity
+ * tiers defined in UI_UX_Design.md:
+ *
+ * - isRecoverable == true  → Recoverable Operational tier: inline card with
+ *   a Retry action (e.g. StreamResolutionFailed, NoNetworkConnection,
+ *   AllProvidersUnavailable — the kind of failure where trying again is a
+ *   reasonable next step).
+ * - isRecoverable == false → Critical/Fatal tier: full-screen state with no
+ *   retry offered (e.g. NoCachedStreamAvailable, NotAuthenticated — trying
+ *   the exact same request again would fail the same way).
+ *
+ * The UI/UX doc's third tier, Non-blocking/Background (Snackbar), is
+ * deliberately not used on this screen. That tier is for failures that
+ * don't block the rest of the screen, like metadata enrichment failing
+ * while a title still shows. Every AppError this screen can receive blocks
+ * the screen's entire purpose — there's nothing else here to show while a
+ * Snackbar's message fades. Flagging this explicitly rather than forcing a
+ * tier that doesn't fit the content.
+ */
+@Composable
+private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
+    val message = errorMessage(error)
+
+    if (error.isRecoverable) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Button(onClick = onRetry) {
+                Text(stringResource(R.string.player_retry))
+            }
+        }
+    } else {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+}
+
+/**
+ * User-facing copy for each AppError case relevant to playback.
+ *
+ * Kept local to this screen rather than added to AppError itself —
+ * AppError is a domain type and should not own presentation strings
+ * (Technical_standards.md: DTOs/domain types stay presentation-agnostic).
+ */
+@Composable
+private fun errorMessage(error: AppError): String = when (error) {
+    is AppError.NoCachedStreamAvailable -> stringResource(R.string.player_error_no_cached_stream)
+    is AppError.StreamResolutionFailed -> stringResource(R.string.player_error_resolution_failed)
+    is AppError.NotAuthenticated -> stringResource(R.string.player_error_not_authenticated)
+    is AppError.NoNetworkConnection -> stringResource(R.string.player_error_no_network)
+    is AppError.AllProvidersUnavailable -> stringResource(R.string.player_error_providers_unavailable)
+    is AppError.LocalStorageError -> stringResource(R.string.player_error_generic)
+    is AppError.Unknown -> stringResource(R.string.player_error_generic)
+}
