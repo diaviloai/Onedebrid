@@ -104,7 +104,7 @@ com.onedebrid.app/
         ├── SwitchProfileUseCase.kt
         └── UpdateProfileUseCase.kt
 
-Single `:app` module, per Project_Design.md — no multi-module split yet. Project_Design.md — no multi-module split yet.
+Single `:app` module, per Project_Design.md — no multi-module split yet.
 
 ## What Actually Works End-to-End Right Now
 
