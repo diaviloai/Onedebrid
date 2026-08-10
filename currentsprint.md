@@ -17,94 +17,94 @@ added, confirmed by Dia).
 ## Package Structure
 
 com.onedebrid.app/
-├── MainActivity.kt
-├── OneDebridApplication.kt
-├── coordinator/
-│   ├── PlaybackCoordinator.kt
-│   ├── SearchCoordinator.kt
-│   └── SessionCoordinator.kt
-├── data/
-│   ├── local/
-│   │   ├── AppDatabase.kt
-│   │   ├── TypeConverters.kt
-│   │   ├── dao/
-│   │   │   ├── CacheEntryDao.kt
-│   │   │   ├── ContinueWatchingDao.kt
-│   │   │   ├── DownloadDao.kt
-│   │   │   ├── ProfileDao.kt
-│   │   │   ├── RecentlyPlayedDao.kt
-│   │   │   └── SearchHistoryDao.kt
-│   │   └── entity/
-│   │       ├── CacheEntryEntity.kt
-│   │       ├── ContinueWatchingEntity.kt
-│   │       ├── DownloadEntity.kt
-│   │       ├── ProfileEntity.kt
-│   │       ├── RecentlyPlayedEntity.kt
-│   │       └── SearchHistoryEntity.kt
-│   └── repository/
-│       ├── MediaRepository.kt / MediaRepositoryImpl.kt
-│       ├── PlaybackRepository.kt / PlaybackRepositoryImpl.kt
-│       ├── ProfileRepository.kt / ProfileRepositoryImpl.kt
-│       ├── RepositoryResult.kt
-│       ├── SearchRepository.kt / SearchRepositoryImpl.kt
-│       ├── SessionRepository.kt / SessionRepositoryImpl.kt
-│       └── SubtitleRepository.kt / SubtitleRepositoryImpl.kt
-├── di/
-│   ├── ApplicationScope.kt / ApplicationScopeModule.kt
-│   ├── CoroutineDispatchers.kt
-│   ├── DatabaseModule.kt
-│   ├── DispatchersModule.kt
-│   ├── ProviderModule.kt
-│   └── RepositoryModule.kt
-├── domain/
-│   ├── error/
-│   │   ├── AppError.kt
-│   │   ├── ProviderError.kt
-│   │   └── ProviderResult.kt
-│   └── model/
-│       ├── Episode.kt
-│       ├── Media.kt
-│       ├── PlaybackRequest.kt
-│       ├── SearchResult.kt
-│       ├── SessionState.kt
-│       ├── StreamSource.kt
-│       ├── SubtitleTrack.kt
-│       ├── UserProfile.kt
-│       └── WatchedItem.kt
-├── provider/
-│   ├── debrid/DebridProvider.kt / StubDebridProvider.kt
-│   ├── metadata/MetadataProvider.kt / StubMetadataProvider.kt
-│   ├── search/SearchProvider.kt / StubSearchProvider.kt
-│   └── subtitle/SubtitleProvider.kt / StubSubtitleProvider.kt
-├── ui/
-│   ├── home/HomeViewModel.kt                    (no Composable screen yet)
-│   ├── navigation/
-│   │   ├── NavGraph.kt
-│   │   └── PendingPlaybackHolder.kt
-│   ├── player/PlayerScreen.kt / PlayerViewModel.kt
-│   ├── search/SearchViewModel.kt                (no Composable screen yet)
-│   └── settings/ProfileViewModel.kt             (no Composable screen yet)
-└── usecase/
-├── ClearPlaybackHistoryUseCase.kt
-├── ClearSearchHistoryUseCase.kt
-├── CreateProfileUseCase.kt
-├── DeleteProfileUseCase.kt
-├── EndPlaybackSessionUseCase.kt
-├── GetActiveProfileUseCase.kt
-├── GetContinueWatchingUseCase.kt
-├── GetProfilesUseCase.kt
-├── GetSearchHistoryUseCase.kt
-├── MarkAsCompletedUseCase.kt
-├── RecordPlaybackUseCase.kt
-├── RemoveFromContinueWatchingUseCase.kt
-├── ResolvePlaybackUseCase.kt
-├── SavePlaybackPositionUseCase.kt
-├── SearchMediaUseCase.kt
-├── StartPlaybackUseCase.kt
-├── SwitchProfileUseCase.kt
-└── UpdateProfileUseCase.kt
+    ├── MainActivity.kt
+    ├── OneDebridApplication.kt
+    ├── coordinator/
+    │   ├── PlaybackCoordinator.kt
+    │   ├── SearchCoordinator.kt
+    │   └── SessionCoordinator.kt
+    ├── data/
+    │   ├── local/
+    │   │   ├── AppDatabase.kt
+    │   │   ├── TypeConverters.kt
+    │   │   ├── dao/
+    │   │   │   ├── CacheEntryDao.kt
+    │   │   │   ├── ContinueWatchingDao.kt
+    │   │   │   ├── DownloadDao.kt
+    │   │   │   ├── ProfileDao.kt
+    │   │   │   ├── RecentlyPlayedDao.kt
+    │   │   │   └── SearchHistoryDao.kt
+    │   │   └── entity/
+    │   │       ├── CacheEntryEntity.kt
+    │   │       ├── ContinueWatchingEntity.kt
+    │   │       ├── DownloadEntity.kt
+    │   │       ├── ProfileEntity.kt
+    │   │       ├── RecentlyPlayedEntity.kt
+    │   │       └── SearchHistoryEntity.kt
+    │   └── repository/
+    │       ├── MediaRepository.kt / MediaRepositoryImpl.kt
+    │       ├── PlaybackRepository.kt / PlaybackRepositoryImpl.kt
+    │       ├── ProfileRepository.kt / ProfileRepositoryImpl.kt
+    │       ├── RepositoryResult.kt
+    │       ├── SearchRepository.kt / SearchRepositoryImpl.kt
+    │       ├── SessionRepository.kt / SessionRepositoryImpl.kt
+    │       └── SubtitleRepository.kt / SubtitleRepositoryImpl.kt
+    ├── di/
+    │   ├── ApplicationScope.kt / ApplicationScopeModule.kt
+    │   ├── CoroutineDispatchers.kt
+    │   ├── DatabaseModule.kt
+    │   ├── DispatchersModule.kt
+    │   ├── ProviderModule.kt
+    │   └── RepositoryModule.kt
+    ├── domain/
+    │   ├── error/
+    │   │   ├── AppError.kt
+    │   │   ├── ProviderError.kt
+    │   │   └── ProviderResult.kt
+    │   └── model/
+    │       ├── Episode.kt
+    │       ├── Media.kt
+    │       ├── PlaybackRequest.kt
+    │       ├── SearchResult.kt
+    │       ├── SessionState.kt
+    │       ├── StreamSource.kt
+    │       ├── SubtitleTrack.kt
+    │       ├── UserProfile.kt
+    │       └── WatchedItem.kt
+    ├── provider/
+    │   ├── debrid/DebridProvider.kt / StubDebridProvider.kt
+    │   ├── metadata/MetadataProvider.kt / StubMetadataProvider.kt
+    │   ├── search/SearchProvider.kt / StubSearchProvider.kt
+    │   └── subtitle/SubtitleProvider.kt / StubSubtitleProvider.kt
+    ├── ui/
+    │   ├── home/HomeViewModel.kt                    (no Composable screen yet)
+    │   ├── navigation/
+    │   │   ├── NavGraph.kt
+    │   │   └── PendingPlaybackHolder.kt
+    │   ├── player/PlayerScreen.kt / PlayerViewModel.kt
+    │   ├── search/SearchViewModel.kt                (no Composable screen yet)
+    │   └── settings/ProfileViewModel.kt             (no Composable screen yet)
+    └── usecase/
+        ├── ClearPlaybackHistoryUseCase.kt
+        ├── ClearSearchHistoryUseCase.kt
+        ├── CreateProfileUseCase.kt
+        ├── DeleteProfileUseCase.kt
+        ├── EndPlaybackSessionUseCase.kt
+        ├── GetActiveProfileUseCase.kt
+        ├── GetContinueWatchingUseCase.kt
+        ├── GetProfilesUseCase.kt
+        ├── GetSearchHistoryUseCase.kt
+        ├── MarkAsCompletedUseCase.kt
+        ├── RecordPlaybackUseCase.kt
+        ├── RemoveFromContinueWatchingUseCase.kt
+        ├── ResolvePlaybackUseCase.kt
+        ├── SavePlaybackPositionUseCase.kt
+        ├── SearchMediaUseCase.kt
+        ├── StartPlaybackUseCase.kt
+        ├── SwitchProfileUseCase.kt
+        └── UpdateProfileUseCase.kt
 
-Single `:app` module, per Project_Design.md — no multi-module split yet.
+Single `:app` module, per Project_Design.md — no multi-module split yet. Project_Design.md — no multi-module split yet.
 
 ## What Actually Works End-to-End Right Now
 
