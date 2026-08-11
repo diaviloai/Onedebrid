@@ -11,4 +11,14 @@
     <string name="player_error_no_network">No network connection. Check your connection and try again.</string>
     <string name="player_error_providers_unavailable">All providers are unavailable right now. Please try again shortly.</string>
     <string name="player_error_generic">Something went wrong. Please try again.</string>
+
+    <!-- Search screen -->
+    <string name="search_placeholder">Search movies and shows</string>
+    <string name="search_idle_empty">Search for something to watch</string>
+    <string name="search_history_title">Recent searches</string>
+    <string name="search_history_clear">Clear</string>
+    <string name="search_no_results">No results found</string>
+    <string name="search_tv_show_label">TV Show</string>
+    <string name="search_tv_show_unsupported">Not yet supported</string>
+    <string name="search_error_providers_unavailable">All search providers are unavailable right now. Please try again shortly.</string>
 </resources>

@@ -50,6 +50,13 @@ class SearchViewModel @Inject constructor(
         getActiveProfileUseCase()
             .onEach { profile ->
                 _activeProfile.value = profile
+                // Mirror the active profile's id into UiState. The screen
+                // needs this to hand off to PendingPlaybackHolder.set() when
+                // the user taps a result — it has no other way to reach the
+                // active profile id, since _activeProfile itself is private
+                // and exists here only for this ViewModel's own synchronous
+                // reads inside search()/clearHistory().
+                _uiState.value = _uiState.value.copy(activeProfileId = profile.id)
                 // When the profile changes, start observing its history.
                 // History observation is started here rather than once at init
                 // so it naturally re-scopes if the profile switches.
@@ -123,8 +130,13 @@ class SearchViewModel @Inject constructor(
  *
  * searchState: Current execution state (idle / searching / results / error).
  * searchHistory: Past queries for the active profile, shown when idle.
+ * activeProfileId: The currently active profile's id, or null if no profile
+ * is active yet. Exposed so SearchScreen can pass it to
+ * PendingPlaybackHolder.set() when the user taps a result to play it —
+ * SearchScreen has no other route to the active profile id.
  */
 data class SearchUiState(
     val searchState: SearchState = SearchState.Idle,
-    val searchHistory: List<String> = emptyList()
+    val searchHistory: List<String> = emptyList(),
+    val activeProfileId: String? = null
 )
