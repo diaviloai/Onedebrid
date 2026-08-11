@@ -19,19 +19,28 @@ interface SearchProvider {
     val displayName: String
 
     /**
-     * Searches for stream candidates matching the given query.
+     * Searches for media matching the given query.
      *
      * [query] is a free-text title search.
      * [filters] optionally constrains results by year, type, quality, etc.
      *
-     * Returns a [SearchResult] containing ranked [StreamCandidate] objects.
-     * An empty result list inside Success is valid — it means this provider
-     * found nothing, not that the search failed.
+     * Returns a list of [SearchResult], each pairing a distinct [Media] match
+     * with its own ranked [StreamCandidate] objects. A search naturally
+     * produces multiple distinct titles (e.g. querying "the office" should
+     * surface both the US and UK versions) — a single SearchResult cannot
+     * represent that, which is why this returns a list rather than one
+     * SearchResult. This is also what makes Aggregator/Union merging across
+     * multiple SearchProviders meaningful (Provider_Architecture.md) — there
+     * would be nothing to merge if each provider could only ever return one
+     * match.
+     *
+     * An empty list inside Success is valid — it means this provider found
+     * nothing, not that the search failed.
      */
     suspend fun search(
         query: String,
         filters: SearchFilters = SearchFilters()
-    ): ProviderResult<SearchResult>
+    ): ProviderResult<List<SearchResult>>
 }
 
 /**

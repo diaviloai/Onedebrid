@@ -13,6 +13,6 @@ class StubSearchProvider @Inject constructor() : SearchProvider {
     override suspend fun search(
         query: String,
         filters: SearchFilters
-    ): ProviderResult<SearchResult> =
+    ): ProviderResult<List<SearchResult>> =
         ProviderResult.Failure(ProviderError.ServiceUnavailable)
 }

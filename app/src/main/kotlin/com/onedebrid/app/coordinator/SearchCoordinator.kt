@@ -76,6 +76,6 @@ class SearchCoordinator @Inject constructor(
 sealed interface SearchState {
     data object Idle : SearchState
     data object Searching : SearchState
-    data class Results(val result: SearchResult) : SearchState
+    data class Results(val results: List<SearchResult>) : SearchState
     data class Error(val error: AppError) : SearchState
 }

@@ -70,14 +70,14 @@ class MediaRepositoryImpl @Inject constructor(
             debridProvider.checkCache(hashes).toRepositoryResult()
         }
 
-override suspend fun search(
+    override suspend fun search(
         query: String,
         profileId: String
-    ): RepositoryResult<SearchResult> =
+    ): RepositoryResult<List<SearchResult>> =
         withContext(dispatchers.io) {
             searchProvider.search(query).toRepositoryResult()
         }
-        
+
     // --- ProviderResult → RepositoryResult translation ---
 
     private fun <T> ProviderResult<T>.toRepositoryResult(): RepositoryResult<T> =

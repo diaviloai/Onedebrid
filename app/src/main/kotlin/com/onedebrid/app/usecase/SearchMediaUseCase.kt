@@ -17,7 +17,7 @@ class SearchMediaUseCase @Inject constructor(
     suspend operator fun invoke(
         query: String,
         profileId: String
-    ): RepositoryResult<SearchResult> = withContext(dispatchers.io) {
+    ): RepositoryResult<List<SearchResult>> = withContext(dispatchers.io) {
 
         // Save to history regardless of search outcome.
         // If the history write fails, swallow the error — a history

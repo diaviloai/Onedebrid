@@ -63,9 +63,13 @@ interface MediaRepository {
      * in place this will always return AllProvidersUnavailable — that is
      * expected until real providers are wired in.
      *
+     * Returns a list of SearchResult — a query naturally matches multiple
+     * distinct titles, not just one (see SearchProvider.kt's doc comment
+     * for the full reasoning).
+     *
      * profileId is included so that future provider priority logic can
      * consult the active profile's providerPriorities when selecting
      * which search providers to query.
      */
-    suspend fun search(query: String, profileId: String): RepositoryResult<SearchResult>
+    suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>>
 }
