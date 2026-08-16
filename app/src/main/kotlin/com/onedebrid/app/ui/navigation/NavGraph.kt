@@ -9,6 +9,7 @@ import androidx.navigation.compose.rememberNavController
 import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
+import com.onedebrid.app.ui.settings.SettingsScreen
 
 /**
  * Route identifiers for the app's navigation graph.
@@ -21,27 +22,24 @@ import com.onedebrid.app.ui.search.SearchScreen
  * sealed types over stringly-typed state (see ScreenUiState in
  * Technical_standards.md).
  *
- * Home, Player, and Search are all wired to real screens as of Session 23.
- * Settings is still not declared — ProfileViewModel exists but no Settings
- * Composable screen has been built yet. Adding a Route entry with no
- * destination to navigate to would be dead code that implies more is wired
- * up than actually is.
+ * Home, Player, Search, and (as of Session 23) Settings are all wired to
+ * real screens.
  */
 sealed class Route(val path: String) {
     data object Home : Route("home")
     data object Player : Route("player")
     data object Search : Route("search")
+    data object Settings : Route("settings")
 }
 
 /**
  * The app's single NavHost.
  *
- * As of Session 23, Home is wired to the real HomeScreen composable
- * (replacing the inline placeholder used in Sessions 21–22). HomeScreen's
- * own doc comment covers its one deliberate limitation: Continue Watching
- * rows are not yet tappable to resume playback, since WatchedItem carries
- * no full Media object and no Media lookup layer exists yet (currentsprint.md
- * Next Steps item 5).
+ * Home is wired to the real HomeScreen composable. HomeScreen's own doc
+ * comment covers its one deliberate limitation: Continue Watching rows are
+ * not yet tappable to resume playback, since WatchedItem carries no full
+ * Media object and no Media lookup layer exists yet (currentsprint.md Next
+ * Steps item 5).
  *
  * Player is wired for real. It reads its PlaybackRequest from
  * PendingPlaybackHolder rather than from nav arguments — see that file's
@@ -59,6 +57,13 @@ sealed class Route(val path: String) {
  * PendingPlaybackHolder and then navigating to Route.Player.path — see
  * SearchScreen.kt's own doc comment for its two deliberate limitations
  * (TV_SHOW results not yet playable, no manual stream-source picker yet).
+ *
+ * Settings is wired for real (Session 23), reached the same way as
+ * Search — a plain forward navigate() from Home with no popUpTo, so
+ * back-press returns to Home normally. SettingsScreen.kt takes no
+ * PendingPlaybackHolder or navigation callbacks of its own; it is a leaf
+ * destination in this graph (no further forward navigation happens from
+ * it yet).
  */
 @Composable
 fun NavGraph(
@@ -75,6 +80,9 @@ fun NavGraph(
             HomeScreen(
                 onNavigateToSearch = {
                     navController.navigate(Route.Search.path)
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Route.Settings.path)
                 }
             )
         }
@@ -104,6 +112,10 @@ fun NavGraph(
                     navController.navigate(Route.Player.path)
                 }
             )
+        }
+
+        composable(Route.Settings.path) {
+            SettingsScreen()
         }
     }
 }

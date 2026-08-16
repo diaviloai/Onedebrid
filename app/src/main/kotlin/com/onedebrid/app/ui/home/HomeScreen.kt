@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,7 +42,10 @@ import com.onedebrid.app.domain.model.WatchedItem
  * NavGraph.kt (Session 21–22). The placeholder's one piece of real
  * functionality — a button to reach Search — is preserved here as
  * [onNavigateToSearch], now presented as a proper top bar action instead
- * of a floating debug button, since this is meant to be a real screen.
+ * of a floating debug button, since this is meant to be a real screen. A
+ * second top bar action, [onNavigateToSettings], was added in the same
+ * session (Session 23) once SettingsScreen.kt existed, using the same
+ * TextButton-in-TopAppBar pattern for consistency.
  *
  * Known, deliberate limitation (Session 23), same "flag rather than
  * silently work around" convention SearchScreen established for its
@@ -61,6 +65,7 @@ import com.onedebrid.app.domain.model.WatchedItem
 @Composable
 fun HomeScreen(
     onNavigateToSearch: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -70,6 +75,9 @@ fun HomeScreen(
         TopAppBar(
             title = { Text(stringResource(R.string.home_title)) },
             actions = {
+                TextButton(onClick = onNavigateToSettings) {
+                    Text(stringResource(R.string.home_settings_action))
+                }
                 Button(onClick = onNavigateToSearch) {
                     Text(stringResource(R.string.home_search_action))
                 }

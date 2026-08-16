@@ -25,8 +25,48 @@
     <!-- Home screen -->
     <string name="home_title">Home</string>
     <string name="home_search_action">Search</string>
+    <string name="home_settings_action">Settings</string>
     <string name="home_continue_watching_title">Continue Watching</string>
     <string name="home_continue_watching_empty">Nothing to continue watching yet</string>
     <string name="home_remove_item">Remove from Continue Watching</string>
     <string name="home_continue_watching_progress">%1$d%% watched</string>
+
+    <!-- Settings / Profile screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_profiles_title">Profiles</string>
+    <string name="settings_profile_active_label">Active</string>
+    <string name="settings_profile_switch">Switch</string>
+    <string name="settings_profile_delete">Delete</string>
+    <string name="settings_profile_add">Add profile</string>
+    <string name="settings_profile_name_label">Profile name</string>
+    <string name="settings_profile_save">Save</string>
+    <string name="settings_profile_cancel">Cancel</string>
+    <string name="settings_new_profile_title">New profile</string>
+    <string name="settings_rename_profile_title">Rename profile</string>
+
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_preferred_quality">Preferred quality</string>
+    <string name="settings_preferred_audio_language">Preferred audio language</string>
+    <string name="settings_autoplay">Auto-play next episode</string>
+
+    <string name="settings_section_subtitles">Subtitles</string>
+    <string name="settings_subtitles_enabled">Subtitles enabled</string>
+    <string name="settings_subtitle_language">Preferred subtitle language</string>
+    <string name="settings_subtitle_format">Preferred subtitle format</string>
+    <string name="settings_subtitle_format_none">No preference</string>
+    <string name="settings_hearing_impaired">Prefer hearing-impaired tracks</string>
+
+    <string name="settings_section_search">Search</string>
+    <string name="settings_include_adult">Include adult content in results</string>
+    <string name="settings_content_language">Preferred content language</string>
+
+    <string name="settings_section_theme">Theme</string>
+    <string name="settings_dynamic_color">Use dynamic color</string>
+    <string name="settings_dark_mode">Dark mode</string>
+    <string name="settings_dark_mode_system">Follow system</string>
+    <string name="settings_dark_mode_on">On</string>
+    <string name="settings_dark_mode_off">Off</string>
+
+    <string name="settings_language_code_hint">BCP-47 code, e.g. en</string>
+    <string name="settings_error_generic">Something went wrong. Please try again.</string>
 </resources>
