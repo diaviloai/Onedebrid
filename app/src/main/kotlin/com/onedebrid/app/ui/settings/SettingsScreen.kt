@@ -103,7 +103,7 @@ fun SettingsScreen(
     LaunchedEffect(effect) {
         val currentEffect = effect
         if (currentEffect is ProfileEffect.Error) {
-            errorMessage = settingsErrorMessage(currentEffect.error)
+            pendingError = currentEffect.error
         }
         if (currentEffect != null) {
             viewModel.effectConsumed()
@@ -167,15 +167,15 @@ fun SettingsScreen(
         )
     }
 
-    errorMessage?.let { message ->
+    pendingError?.let { error ->
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = { pendingError = null },
             confirmButton = {
-                TextButton(onClick = { errorMessage = null }) {
+                TextButton(onClick = { pendingError = null }) {
                     Text(stringResource(R.string.settings_profile_cancel))
                 }
             },
-            text = { Text(message) }
+            text = { Text(settingsErrorMessage(error)) }
         )
     }
 }
