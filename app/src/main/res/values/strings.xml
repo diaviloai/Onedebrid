@@ -21,4 +21,12 @@
     <string name="search_tv_show_label">TV Show</string>
     <string name="search_tv_show_unsupported">Not yet supported</string>
     <string name="search_error_providers_unavailable">All search providers are unavailable right now. Please try again shortly.</string>
+
+    <!-- Home screen -->
+    <string name="home_title">Home</string>
+    <string name="home_search_action">Search</string>
+    <string name="home_continue_watching_title">Continue Watching</string>
+    <string name="home_continue_watching_empty">Nothing to continue watching yet</string>
+    <string name="home_remove_item">Remove from Continue Watching</string>
+    <string name="home_continue_watching_progress">%1$d%% watched</string>
 </resources>
