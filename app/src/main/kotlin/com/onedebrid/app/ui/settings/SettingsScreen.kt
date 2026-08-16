@@ -94,7 +94,7 @@ fun SettingsScreen(
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var renamingProfile by remember { mutableStateOf<UserProfile?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var pendingError by remember { mutableStateOf<AppError?>(null) }
 
     // Consume one-off effects. Only Error needs UI action here (a dialog);
     // Created/Updated/Deleted require no explicit feedback beyond the
