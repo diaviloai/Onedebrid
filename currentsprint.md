@@ -4,14 +4,15 @@
 
 Implementation in progress. Architectural design phase complete.
 
-This file is fully rewritten each session (Session 21 practice, carried
-forward) — it reflects actual current code state, verified by pulling the
-repo and reading files directly, not appended to informally.
+This file is fully rewritten each session — it reflects actual current
+code state, verified by pulling the repo and reading files directly, not
+appended to informally.
 
-Build verification: project compiled cleanly as of Session 21's close.
-Session 22's changes (see below) have been pushed; build result for this
-session's changes should be confirmed at the start of Session 23 before
-trusting this file's "compiles cleanly" claim for the new files.
+Build verification: project compiles cleanly as of Session 22's close,
+confirmed via GitHub Actions CI after the material-icons-core fix below
+(see "Session 22 — Build Failure & Fix"). This confirmation was NOT
+present at the moment SearchScreen.kt was first pushed — see that section
+for what actually happened and why it matters for Session 23.
 
 ## Package Structure
 
@@ -115,13 +116,11 @@ Single `:app` module, per Project_Design.md — no multi-module split yet.
   `navController.navigate(Route.Player.path)`. PlayerScreen reads it back,
   drives PlaybackCoordinator through resolve → ready → play, owns the
   ExoPlayer instance, reports lifecycle state back to PlayerViewModel.
-- **SearchScreen.kt exists (new, Session 22) but is not reachable from the
+- **SearchScreen.kt exists (new, Session 22), compiles cleanly (confirmed
+  via CI after the icons-dependency fix), but is not reachable from the
   running app yet.** `Route.Search` is not declared in `NavGraph.kt` and
   `NavGraph.kt`'s `NavHost` has no `composable(Route.Search.path) { ... }`
-  entry calling it. The screen itself compiles and is functionally complete
-  against the current domain model (see Session 22 section below for what
-  it does and its two deliberate limitations). Wiring it into NavGraph is
-  the top item in Next Steps.
+  entry calling it. Wiring it in is the top item in Next Steps.
 - Theme (`OneDebridTheme` in MainActivity.kt) correctly branches on
   `Build.VERSION.SDK_INT` — dynamic color on API 31+, Material 3 baseline
   on API 26-30.
@@ -132,7 +131,7 @@ Single `:app` module, per Project_Design.md — no multi-module split yet.
 before writing it: `SearchCoordinator.SearchState.Results` held a single
 `SearchResult` (and therefore a single `Media`), all the way down through
 `SearchMediaUseCase` and `MediaRepository.search()` to `SearchProvider`
-itself. A search can only ever match one title this way — wrong per
+itself. A search could only ever match one title this way — wrong per
 UI_UX_Design.md's "Instant Search Results" (plural) and
 Provider_Architecture.md's Aggregator/Union strategy, which only makes
 sense if there's a list to merge. Fixed bottom-up across five files, in
@@ -152,14 +151,8 @@ intermediate broken-signature state):
    `results`, retyped `SearchResult` → `List<SearchResult>`.
 
 Verified byte-for-byte against `raw.githubusercontent.com` after push
-(re-pulled tarball, grepped every changed signature) — confirmed landed
-correctly, not just inferred from a passing build.
-
-Checked for anything else referencing the old singular shape before
-declaring this done: `SearchViewModel.kt` only forwards `coordinatorState`
-as a whole and never destructured `.result`, so it needed no change. No
-other file referenced `SearchState.Results` yet (no real SearchScreen
-existed at the time of the fix).
+(re-pulled tarball, grepped every changed signature) before moving on —
+confirmed landed correctly, not just inferred from a passing build.
 
 **Part 2: SearchScreen.kt (new) + SearchViewModel.kt (small addition).**
 
@@ -167,14 +160,11 @@ existed at the time of the fix).
   `SearchUiState`, populated from the existing internal `_activeProfile`
   tracking in `init`. Needed because SearchScreen has to pass a profileId
   to `PendingPlaybackHolder.set()` and had no other way to reach the active
-  profile id (the ViewModel's `_activeProfile` was private, used only for
-  the ViewModel's own synchronous reads inside `search()`/`clearHistory()`).
-  No other change to this file — `search()`, `clearSearch()`,
-  `clearHistory()`, `observeHistory()` untouched.
+  profile id. No other change to this file.
 - `SearchScreen.kt` (new, `ui/search/`) — search bar, idle/history list,
-  loading, results list, and error states, switching on
-  `SearchState`. Two deliberate limitations, both visibly flagged in the UI
-  rather than silently worked around:
+  loading, results list, and error states, switching on `SearchState`. Two
+  deliberate limitations, both visibly flagged in the UI rather than
+  silently worked around:
   1. Only `MediaType.MOVIE` results are tappable. `PlaybackRequest`
      requires an `Episode` for `TV_SHOW` content; `SearchResult`/`Media`
      carry no episode data, and no episode-picker screen exists. TV_SHOW
@@ -182,50 +172,102 @@ existed at the time of the fix).
      silently inert.
   2. Playback always uses Smart Defaults — built `PlaybackRequest` always
      has `preferredSource = null`. No stream-candidate picker UI exists yet
-     for manual override. Matches Project_Design.md's Smart Defaults
-     principle as correct default behavior, not a shortcut.
+     for manual override.
   Error state reuses the same `AppError.isRecoverable` split PlayerScreen
   established, rather than inventing a second convention for the same type.
 - `strings.xml` — added `search_*` string resources (8 new entries),
   existing `player_*` entries untouched.
 
-**Not done this session, flagged explicitly:** `NavGraph.kt` was NOT
-touched. `Route.Search` is not declared, and there is no
-`composable(Route.Search.path)` entry in `NavHost` calling `SearchScreen`.
-The screen compiles standalone but nothing in the running app can reach it
-yet — same "wired but unreached" pattern Player was briefly in mid-Session
-21, done deliberately this time (not an oversight) since wiring it in also
-requires deciding where Search lives in the nav graph relative to Home,
-which wasn't decided this session.
+**Not done this session:** `NavGraph.kt` was NOT touched. `Route.Search` is
+not declared, no `composable(Route.Search.path)` entry exists. SearchScreen
+compiles standalone but nothing in the running app can reach it yet —
+deliberate, since wiring it in also requires deciding where Search lives
+in the nav graph relative to Home.
+
+## Session 22 — Build Failure & Fix (important — read before Session 23)
+
+The first push of `SearchScreen.kt` **failed CI**, contradicting the
+initial close-out message given alongside that file, which described the
+session as done without having seen a build result. That was a process
+mistake — treating the file as complete based on "it should compile"
+reasoning rather than an actual green build, exactly the "build successful
+does not confirm what's claimed" trap the project's own lessons already
+warn about, just from the opposite direction (this time no CI check had
+even run yet, rather than CI passing on the wrong content).
+
+**Root cause:** `SearchScreen.kt` used `Icons.Filled.Search` (from
+`androidx.compose.material.icons.Icons`) without first checking whether
+that artifact was declared as a dependency. It wasn't — grepping
+`app/build.gradle.kts` after the failure showed no prior file in the
+codebase had ever used `Icons`, so nothing had pulled in
+`material-icons-core` before now. This is the same "read the actual file
+before writing code" lesson the project already tracks, just applied to a
+build file instead of a Kotlin source file — the fix going forward is to
+grep `build.gradle.kts` for a dependency before importing from it, not
+just assume common Compose/Material APIs are already available.
+
+**Fix, two files:**
+1. `gradle/libs.versions.toml` — added
+   `androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }`
+   under the Compose libraries block. No `version.ref` — rides the existing
+   `composeBom` version like the other Compose artifacts already do (see
+   the file's own comment on why: BOM manages Compose artifact versions).
+2. `app/build.gradle.kts` — added
+   `implementation(libs.androidx.compose.material.icons.core)` directly
+   after the existing `implementation(libs.androidx.compose.material3)`
+   line in the `// Compose` dependency block.
+
+`material-icons-core` was chosen over `material-icons-extended` — core
+contains `Icons.Filled.Search` and is the leaner, correctly-scoped choice
+per Technical_Standards.md's dependency discipline; extended is
+substantially larger and unjustified for one icon.
+
+**Verified:** re-pulled the repo fresh after the fix was pushed, grepped
+`libs.versions.toml`, `app/build.gradle.kts`, and `SearchScreen.kt`
+directly to confirm all three pieces were live together, then confirmed
+green via GitHub Actions CI. This build result is the first real
+confirmation SearchScreen.kt compiles — treat everything above this
+section as verified, but treat the original "session closed cleanly"
+framing given before this fix as inaccurate; this section supersedes it.
 
 ## Process Notes (Session 22)
 
-- Session opened by re-pulling the repo per the standing rule (`curl` the
-  tarball) and reading `currentsprint.md` before any code was touched —
-  confirmed Session 21's file was accurate, no stale-doc surprises this
-  time.
+- Session opened by re-pulling the repo per the standing rule and reading
+  `currentsprint.md` before any code was touched — confirmed Session 21's
+  file was accurate.
 - The list-shape fix (Part 1) was caught by reading the actual
   `SearchCoordinator`/`SearchMediaUseCase`/`MediaRepository` code before
-  starting SearchScreen, not assumed from memory — direct application of
-  the "read actual files before writing any code" rule turning up a real
-  bug rather than just avoiding one.
+  starting SearchScreen, not assumed from memory.
 - All five list-shape-fix files verified against `raw.githubusercontent.com`
-  post-push before moving on to SearchScreen — re-pulled tarball, grepped
-  every changed signature line, confirmed match. Following the Session 21
-  lesson: a clean build confirms the code that landed compiles, not which
-  code landed.
-- Session closed after SearchScreen.kt rather than continuing to NavGraph
-  wiring, on the reasoning that the conversation had grown long enough that
-  starting a new dependent file risked losing earlier context/decisions —
-  a fresh session for NavGraph wiring was chosen deliberately, not because
-  the work was blocked.
+  post-push before moving on to SearchScreen.
+- **SearchScreen.kt was NOT similarly protected before its first push** —
+  it was declared complete without a build check, and without grepping
+  `build.gradle.kts` for the `Icons` dependency it used. This gap is why
+  the CI failure happened and is the specific mistake to avoid repeating.
+- Session closed (this time, after the fix) only once CI confirmed green
+  and the fix was verified live against the actual repo content — not
+  before.
 
 ## Key Lessons & Principles (carried forward, still in force)
 
-- **Read actual files before writing any code** — non-negotiable. Recurring
-  build failures in Sessions 14 and 16 came from writing against assumed
-  rather than actual interfaces. Session 22's list-shape bug was caught by
-  this same discipline.
+- **Read actual files before writing any code** — non-negotiable. Sessions
+  14 and 16 had build failures from writing against assumed interfaces.
+  Session 22 applied this to catch the SearchResult list-shape bug
+  correctly, but then failed to apply the same discipline to a Gradle
+  dependency, causing the icons build failure. The lesson now explicitly
+  covers build files, not just Kotlin interfaces — see next bullet.
+- **NEW (Session 22): grep build.gradle.kts / libs.versions.toml before
+  importing anything from a library that hasn't been used elsewhere in the
+  codebase yet** — even common-seeming APIs (like Material `Icons`) may
+  not have their artifact declared. Don't assume a dependency exists just
+  because the API is well-known; check the actual declared dependencies
+  first.
+- **NEW (Session 22): don't declare a session or a file "done" without an
+  actual CI result.** Reasoning that code "should" compile is not the same
+  as knowing it does — this is the same principle as "build successful
+  doesn't confirm the intended code compiled," applied to the case where
+  no build has run at all yet, not just the case where it passed on the
+  wrong content.
 - **currentsprint.md on GitHub is the authoritative completion record** —
   project file copies are a convenience cache only.
 - **Flow collection:** always `flow.onEach{}.launchIn(viewModelScope)`,
@@ -246,14 +288,10 @@ which wasn't decided this session.
   build cache); `gradle-wrapper.jar` handled via
   `gradle/actions/setup-gradle@v3`.
 - **Verify pushed file contents directly, don't infer from build status** —
-  re-pull and diff against GitHub before treating any edit as landed,
-  especially before starting a dependent task in the same file.
-- **NEW (Session 22): a use case/coordinator/repository chain returning a
-  singular type where the domain clearly implies a collection (e.g. search
-  results) is worth checking explicitly before building a screen against
-  it** — this was a real pre-existing bug, not a hypothetical one, and
-  would have forced a screen rewrite if caught after the fact instead of
-  before.
+  re-pull and diff against GitHub before treating any edit as landed.
+- **A use case/coordinator/repository chain returning a singular type where
+  the domain clearly implies a collection is worth checking explicitly
+  before building a screen against it** (Session 22 SearchResult example).
 
 ## Next Steps, In Order
 
@@ -261,20 +299,18 @@ which wasn't decided this session.
    `composable(Route.Search.path) { SearchScreen(...) }` entry, decide how
    the user reaches Search from Home (Home is still a placeholder, so this
    may mean Search becomes the temporary start destination, or Home's
-   placeholder gets a button to it — worth deciding with Dia rather than
-   assuming). This is what makes SearchScreen actually reachable for the
-   first time.
+   placeholder gets a button to it — decide with Dia rather than assuming).
 2. **HomeScreen.kt** (real Composable, replacing NavGraph's inline
    placeholder). HomeViewModel already exists.
 3. Settings/Profile screen (real Composable) — ProfileViewModel exists.
 4. Continue Watching persistence gap: `SavePlaybackPositionUseCase`
    currently only updates in-memory `SessionState`, not the Room-backed
-   ContinueWatchingEntity table. Not persisted end-to-end yet.
+   ContinueWatchingEntity table.
 5. Media cache/lookup layer — not yet started. Would eventually let the nav
    graph pass a bare `mediaId` as a real nav arg, fix
    PendingPlaybackHolder's process-death gap, and let SearchScreen route
-   TV_SHOW results somewhere (an episode-picker screen) instead of marking
-   them unsupported.
+   TV_SHOW results to an episode-picker screen instead of marking them
+   unsupported.
 6. Episode-picker screen / Details screen — not started. Needed to lift
    Session 22's TV_SHOW limitation in SearchScreen.
 7. Stream-candidate picker UI — not started. Needed to lift Session 22's
@@ -297,20 +333,19 @@ which wasn't decided this session.
 - HomeViewModel.kt has a fully-qualified kotlinx.coroutines.Job reference
   inline instead of a top-level import (Session 16) — not yet tidied
 - NavGraph's home route is an inline placeholder Composable, not real UI
-- **NEW (Session 22):** NavGraph's Search route is not declared and
-  SearchScreen is not reachable — see Next Steps #1
-- **NEW (Session 22):** SearchScreen.kt uses fully-qualified
+- NavGraph's Search route is not declared and SearchScreen is not
+  reachable — see Next Steps #1
+- SearchScreen.kt uses fully-qualified
   `androidx.compose.foundation.text.KeyboardActions`/`KeyboardOptions`
   inline rather than top-level imports, to avoid a possible import-name
   collision that couldn't be verified without seeing the exact Compose BOM
   version pinned in build.gradle.kts. Revisit and tidy to top-level imports
   once confirmed safe.
-- **NEW (Session 22):** SearchScreen's TV_SHOW tap-disabled state and
-  Smart-Defaults-only playback are both deliberate, documented limitations,
-  not bugs — see Session 22 section above and Next Steps #6/#7 for what
-  lifts them.
+- SearchScreen's TV_SHOW tap-disabled state and Smart-Defaults-only
+  playback are both deliberate, documented limitations, not bugs.
 
 At the end of the next session, update currentsprint.md (full file, in a
 code block) and verify it directly against
 raw.githubusercontent.com/diaviloai/Onedebrid/main/currentsprint.md before
-treating the session as closed.
+treating the session as closed — and do not treat any session as closed
+without an actual green CI result for whatever was last pushed.
