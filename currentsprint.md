@@ -8,11 +8,16 @@ This file is fully rewritten each session — it reflects actual current
 code state, verified by pulling the repo and reading files directly, not
 appended to informally.
 
-Build verification: project compiles cleanly as of Session 22's close,
-confirmed via GitHub Actions CI after the material-icons-core fix below
-(see "Session 22 — Build Failure & Fix"). This confirmation was NOT
-present at the moment SearchScreen.kt was first pushed — see that section
-for what actually happened and why it matters for Session 23.
+Build verification: project compiles cleanly as of Session 23's close,
+confirmed via GitHub Actions CI on commit `d66318a3` ("update
+SettingsScreen.kt"), checked directly via the GitHub Actions API
+(`api.github.com/repos/diaviloai/Onedebrid/actions/runs`) — status
+`completed`, conclusion `success`. This is the fourth CI result checked
+this session; the first three (SearchScreen→NavGraph wiring succeeded
+cleanly, HomeScreen succeeded cleanly, but SettingsScreen.kt failed twice
+before succeeding) are detailed below in "Session 23 — Build Failures &
+Fixes," since the failure pattern itself is a real lesson for future
+sessions, not just a footnote.
 
 ## Package Structure
 
@@ -48,273 +53,382 @@ com.onedebrid.app/
     │       ├── RepositoryResult.kt
     │       ├── SearchRepository.kt / SearchRepositoryImpl.kt
     │       ├── SessionRepository.kt / SessionRepositoryImpl.kt
-    │       └── SubtitleRepository.kt / SubtitleRepositoryImpl.kt
+    │       └── (Subtitle/Download repositories not yet built)
     ├── di/
-    │   ├── ApplicationScope.kt / ApplicationScopeModule.kt
     │   ├── CoroutineDispatchers.kt
-    │   ├── DatabaseModule.kt
-    │   ├── DispatchersModule.kt
-    │   ├── ProviderModule.kt
-    │   └── RepositoryModule.kt
+    │   └── (Hilt modules)
     ├── domain/
     │   ├── error/
-    │   │   ├── AppError.kt
-    │   │   ├── ProviderError.kt
-    │   │   └── ProviderResult.kt
+    │   │   └── AppError.kt
     │   └── model/
-    │       ├── Episode.kt
     │       ├── Media.kt
     │       ├── PlaybackRequest.kt
     │       ├── SearchResult.kt
     │       ├── SessionState.kt
-    │       ├── StreamSource.kt
-    │       ├── SubtitleTrack.kt
-    │       ├── UserProfile.kt
+    │       ├── StreamSource.kt (VideoQuality enum)
+    │       ├── SubtitleTrack.kt (SubtitleFormat enum)
+    │       ├── UserProfile.kt (PlaybackPreferences, SubtitlePreferences,
+    │       │   SearchPreferences, ThemePreferences)
     │       └── WatchedItem.kt
     ├── provider/
-    │   ├── debrid/DebridProvider.kt / StubDebridProvider.kt
-    │   ├── metadata/MetadataProvider.kt / StubMetadataProvider.kt
-    │   ├── search/SearchProvider.kt / StubSearchProvider.kt
-    │   └── subtitle/SubtitleProvider.kt / StubSubtitleProvider.kt
+    │   └── (SearchProvider, StubSearchProvider, others)
     ├── ui/
-    │   ├── home/HomeViewModel.kt                    (no Composable screen yet)
+    │   ├── home/
+    │   │   ├── HomeScreen.kt
+    │   │   └── HomeViewModel.kt
     │   ├── navigation/
-    │   │   ├── NavGraph.kt                          (Search NOT yet wired in — see Open TODOs)
+    │   │   ├── NavGraph.kt
     │   │   └── PendingPlaybackHolder.kt
-    │   ├── player/PlayerScreen.kt / PlayerViewModel.kt
-    │   ├── search/SearchViewModel.kt / SearchScreen.kt   (screen new this session; not reachable yet)
-    │   └── settings/ProfileViewModel.kt             (no Composable screen yet)
+    │   ├── player/
+    │   │   ├── PlayerScreen.kt
+    │   │   └── PlayerViewModel.kt
+    │   ├── search/
+    │   │   ├── SearchScreen.kt
+    │   │   └── SearchViewModel.kt
+    │   └── settings/
+    │       ├── SettingsScreen.kt
+    │       └── ProfileViewModel.kt
     └── usecase/
-        ├── ClearPlaybackHistoryUseCase.kt
-        ├── ClearSearchHistoryUseCase.kt
         ├── CreateProfileUseCase.kt
         ├── DeleteProfileUseCase.kt
-        ├── EndPlaybackSessionUseCase.kt
-        ├── GetActiveProfileUseCase.kt
         ├── GetContinueWatchingUseCase.kt
-        ├── GetProfilesUseCase.kt
-        ├── GetSearchHistoryUseCase.kt
-        ├── MarkAsCompletedUseCase.kt
-        ├── RecordPlaybackUseCase.kt
         ├── RemoveFromContinueWatchingUseCase.kt
-        ├── ResolvePlaybackUseCase.kt
-        ├── SavePlaybackPositionUseCase.kt
         ├── SearchMediaUseCase.kt
-        ├── StartPlaybackUseCase.kt
         ├── SwitchProfileUseCase.kt
-        └── UpdateProfileUseCase.kt
+        ├── UpdateProfileUseCase.kt
+        └── (others per earlier sessions)
 
-Single `:app` module, per Project_Design.md — no multi-module split yet.
+(This tree reflects what's been directly read/touched across sessions,
+not a guaranteed exhaustive listing — see the repo itself for ground
+truth on files not mentioned in recent session notes.)
 
-## What Actually Works End-to-End Right Now
+## App Navigation State (as of Session 23)
 
-- App launches into `NavGraph` (wired in MainActivity.kt, Session 21).
-- `home` route renders a minimal inline placeholder (not real UI). It is
-  the nav graph's start destination.
-- `player` route is wired for real. A caller with a full `PlaybackRequest`
-  in hand can call `PendingPlaybackHolder.set(request, profileId)` then
-  `navController.navigate(Route.Player.path)`. PlayerScreen reads it back,
-  drives PlaybackCoordinator through resolve → ready → play, owns the
-  ExoPlayer instance, reports lifecycle state back to PlayerViewModel.
-- **SearchScreen.kt exists (new, Session 22), compiles cleanly (confirmed
-  via CI after the icons-dependency fix), but is not reachable from the
-  running app yet.** `Route.Search` is not declared in `NavGraph.kt` and
-  `NavGraph.kt`'s `NavHost` has no `composable(Route.Search.path) { ... }`
-  entry calling it. Wiring it in is the top item in Next Steps.
-- Theme (`OneDebridTheme` in MainActivity.kt) correctly branches on
-  `Build.VERSION.SDK_INT` — dynamic color on API 31+, Material 3 baseline
-  on API 26-30.
+All four primary screens now exist and are wired into a single
+`NavGraph.kt`:
 
-## Session 22 — Completed
+- **Home** (`Route.Home`, start destination) → real `HomeScreen.kt`.
+  Shows Continue Watching (list, not resumable yet — see Known
+  Limitations). Top bar has Search and Settings actions.
+- **Search** (`Route.Search`) → real `SearchScreen.kt`. Reached via
+  Home's Search button. Forwards to Player via
+  `PendingPlaybackHolder` + `Route.Player.path`.
+- **Player** (`Route.Player`) → real `PlayerScreen.kt`. Reads
+  `PlaybackRequest` from `PendingPlaybackHolder`; routes back to Home
+  (with `popUpTo` clearing itself off the stack) if nothing is pending.
+- **Settings** (`Route.Settings`) → real `SettingsScreen.kt`. Reached
+  via Home's Settings button. Leaf destination (no further forward
+  navigation from it). Profile list (switch/create/rename/delete) +
+  full preference editor for all four `UserProfile` groups (playback,
+  subtitles, search, theme).
 
-**Part 1: SearchResult list-shape fix.** Found while scoping SearchScreen,
-before writing it: `SearchCoordinator.SearchState.Results` held a single
-`SearchResult` (and therefore a single `Media`), all the way down through
-`SearchMediaUseCase` and `MediaRepository.search()` to `SearchProvider`
-itself. A search could only ever match one title this way — wrong per
-UI_UX_Design.md's "Instant Search Results" (plural) and
-Provider_Architecture.md's Aggregator/Union strategy, which only makes
-sense if there's a list to merge. Fixed bottom-up across five files, in
-this order (each depends on the one below it, so this order avoided any
-intermediate broken-signature state):
+No `Route` entries exist beyond these four. Adding an entry without a
+real destination is deliberately avoided (would be dead code implying
+more is wired than actually is).
 
-1. `SearchProvider.kt` — `search()` now returns
-   `ProviderResult<List<SearchResult>>`, was `ProviderResult<SearchResult>`.
-2. `StubSearchProvider.kt` — return type updated to match. Still
-   unconditionally `Failure(ServiceUnavailable)`, no behavior change.
-3. `MediaRepository.kt` / `MediaRepositoryImpl.kt` — `search()` returns
-   `RepositoryResult<List<SearchResult>>`. Impl body unchanged (generic
-   `toRepositoryResult()` extension absorbed the new type automatically).
-4. `SearchMediaUseCase.kt` — `invoke()` returns
-   `RepositoryResult<List<SearchResult>>`. Body unchanged, just forwards.
-5. `SearchCoordinator.kt` — `SearchState.Results` field renamed `result` →
-   `results`, retyped `SearchResult` → `List<SearchResult>`.
+## Known, Deliberate Limitations (documented in code, not silently
+worked around)
 
-Verified byte-for-byte against `raw.githubusercontent.com` after push
-(re-pulled tarball, grepped every changed signature) before moving on —
-confirmed landed correctly, not just inferred from a passing build.
+- **HomeScreen Continue Watching rows are not tappable to resume
+  playback.** `WatchedItem` only carries `mediaId` + progress/episode
+  context, never a full `Media` object. `PlaybackRequest` requires a
+  full `Media`. No Media cache/lookup layer exists yet (Next Steps #2,
+  in chunk 2) to turn a bare `mediaId` back into a `Media`. Rows show
+  mediaId + progress % only, with a Remove action.
+- **SearchScreen TV_SHOW results are non-interactive** (no
+  episode-picker yet) — from Session 22, still true.
+- **SearchScreen playback always uses Smart Defaults**
+  (`preferredSource = null`, no stream-candidate picker) — from
+  Session 22, still true.
+- **SettingsScreen preference edits write to Room on every single
+  toggle/dropdown/keystroke** (no debounce, no explicit Save step for
+  the free-text language fields). Functionally correct, not
+  necessarily optimal — flagged as a possible follow-up if it feels
+  laggy on-device, not something to silently "fix" without confirming
+  it's actually a problem first.
+- **SettingsScreen blank-name and delete-active-profile validation
+  errors both surface as a generic error message**, since `AppError`
+  has no `ValidationError` case yet and `LocalStorageError.cause` is
+  deliberately not shown to the user (see Open TODOs, existing item).
+  The UI does proactively hide the Delete action on the active profile
+  row to avoid the user hitting this in the common case, but the
+  underlying generic-message gap still exists for the create/rename
+  blank-name case.
 
-**Part 2: SearchScreen.kt (new) + SearchViewModel.kt (small addition).**
+## Session 23 — What Was Done
 
-- `SearchViewModel.kt` — added `activeProfileId: String?` to
-  `SearchUiState`, populated from the existing internal `_activeProfile`
-  tracking in `init`. Needed because SearchScreen has to pass a profileId
-  to `PendingPlaybackHolder.set()` and had no other way to reach the active
-  profile id. No other change to this file.
-- `SearchScreen.kt` (new, `ui/search/`) — search bar, idle/history list,
-  loading, results list, and error states, switching on `SearchState`. Two
-  deliberate limitations, both visibly flagged in the UI rather than
-  silently worked around:
-  1. Only `MediaType.MOVIE` results are tappable. `PlaybackRequest`
-     requires an `Episode` for `TV_SHOW` content; `SearchResult`/`Media`
-     carry no episode data, and no episode-picker screen exists. TV_SHOW
-     rows render with a "Not yet supported" label instead of being
-     silently inert.
-  2. Playback always uses Smart Defaults — built `PlaybackRequest` always
-     has `preferredSource = null`. No stream-candidate picker UI exists yet
-     for manual override.
-  Error state reuses the same `AppError.isRecoverable` split PlayerScreen
-  established, rather than inventing a second convention for the same type.
-- `strings.xml` — added `search_*` string resources (8 new entries),
-  existing `player_*` entries untouched.
+All three items completed and independently CI-verified (checked via
+`api.github.com/repos/diaviloai/Onedebrid/actions/runs`, not just
+inferred from "build clean" reports — see rationale in "Verification
+Method" in chunk 2 below).
 
-**Not done this session:** `NavGraph.kt` was NOT touched. `Route.Search` is
-not declared, no `composable(Route.Search.path)` entry exists. SearchScreen
-compiles standalone but nothing in the running app can reach it yet —
-deliberate, since wiring it in also requires deciding where Search lives
-in the nav graph relative to Home.
+### 1. Wired SearchScreen into NavGraph.kt
 
-## Session 22 — Build Failure & Fix (important — read before Session 23)
+Added `Route.Search`. Decided with Dia (explicit choice, not assumed):
+Home stays the start destination; a "Search" button was added to the
+then-placeholder Home route to make Search reachable. `NavGraph.kt`
+rewritten in full. Verified byte-for-byte against
+`raw.githubusercontent.com`. CI run
+`https://github.com/diaviloai/Onedebrid/actions/runs/31959197234` —
+**success**.
 
-The first push of `SearchScreen.kt` **failed CI**, contradicting the
-initial close-out message given alongside that file, which described the
-session as done without having seen a build result. That was a process
-mistake — treating the file as complete based on "it should compile"
-reasoning rather than an actual green build, exactly the "build successful
-does not confirm what's claimed" trap the project's own lessons already
-warn about, just from the opposite direction (this time no CI check had
-even run yet, rather than CI passing on the wrong content).
+### 2. HomeScreen.kt (new) — replaces NavGraph's inline placeholder
 
-**Root cause:** `SearchScreen.kt` used `Icons.Filled.Search` (from
-`androidx.compose.material.icons.Icons`) without first checking whether
-that artifact was declared as a dependency. It wasn't — grepping
-`app/build.gradle.kts` after the failure showed no prior file in the
-codebase had ever used `Icons`, so nothing had pulled in
-`material-icons-core` before now. This is the same "read the actual file
-before writing code" lesson the project already tracks, just applied to a
-build file instead of a Kotlin source file — the fix going forward is to
-grep `build.gradle.kts` for a dependency before importing from it, not
-just assume common Compose/Material APIs are already available.
+New file, wired into `NavGraph.kt` in place of the placeholder Composable
+used since Session 21. Shows Continue Watching via `HomeViewModel`
+(already existed, no changes needed to it). Loading/empty/list states.
+Rows show `mediaId` + a computed progress percentage (new
+`home_continue_watching_progress` string resource, `%1$d%% watched`
+format) with a Remove action. Deliberately **not** tappable — see Known
+Limitations above for why (`WatchedItem` has no `Media`). `strings.xml`
+updated (Home section added). Verified byte-for-byte. CI run
+`https://github.com/diaviloai/Onedebrid/actions/runs/31960490550` —
+**success**.
 
-**Fix, two files:**
-1. `gradle/libs.versions.toml` — added
-   `androidx-compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }`
-   under the Compose libraries block. No `version.ref` — rides the existing
-   `composeBom` version like the other Compose artifacts already do (see
-   the file's own comment on why: BOM manages Compose artifact versions).
-2. `app/build.gradle.kts` — added
-   `implementation(libs.androidx.compose.material.icons.core)` directly
-   after the existing `implementation(libs.androidx.compose.material3)`
-   line in the `// Compose` dependency block.
+### 3. SettingsScreen.kt (new) — full preferences editor
 
-`material-icons-core` was chosen over `material-icons-extended` — core
-contains `Icons.Filled.Search` and is the leaner, correctly-scoped choice
-per Technical_Standards.md's dependency discipline; extended is
-substantially larger and unjustified for one icon.
+Scope decided explicitly with Dia: full editor for all four
+`UserProfile` preference groups (playback, subtitles, search, theme) in
+this session, not deferred. New file. Two responsibilities:
 
-**Verified:** re-pulled the repo fresh after the fix was pushed, grepped
-`libs.versions.toml`, `app/build.gradle.kts`, and `SearchScreen.kt`
-directly to confirm all three pieces were live together, then confirmed
-green via GitHub Actions CI. This build result is the first real
-confirmation SearchScreen.kt compiles — treat everything above this
-section as verified, but treat the original "session closed cleanly"
-framing given before this fix as inaccurate; this section supersedes it.
+- **Profile management:** list all profiles, switch active, create new
+  (name-entry dialog), rename (same dialog, prefilled), delete
+  (disabled in the UI for the currently-active profile, since
+  `DeleteProfileUseCase` rejects deleting the active profile
+  server-side — UI reflects the rule rather than letting the user
+  discover it via an error).
+- **Preference editing**, scoped to the active profile only (no
+  per-profile "select which profile you're editing" UI — Smart
+  Defaults always apply to whichever profile is active). Each group
+  (Playback / Subtitles / Search / Theme) is its own private composable
+  section. Controls: `Switch` for booleans, a custom `DropdownField<T>`
+  for enums and nullable tri-state values (`VideoQuality` excluding
+  `UNKNOWN`; `SubtitleFormat?` with an explicit "No preference" entry
+  standing in for `null`; `darkMode: Boolean?` as a 3-way System/On/Off
+  dropdown), and a free-text `OutlinedTextField` for BCP-47 language
+  codes (no language list/lookup exists in the codebase to back a
+  proper picker yet).
 
-## Process Notes (Session 22)
+`HomeScreen.kt` updated to add a `onNavigateToSettings` callback + a
+second TopAppBar action. `NavGraph.kt` updated to add `Route.Settings`
+and wire `SettingsScreen()` as a leaf destination. `strings.xml`
+extended with a `Settings` section (~30 new strings) plus
+`home_settings_action`.
 
-- Session opened by re-pulling the repo per the standing rule and reading
-  `currentsprint.md` before any code was touched — confirmed Session 21's
-  file was accurate.
-- The list-shape fix (Part 1) was caught by reading the actual
-  `SearchCoordinator`/`SearchMediaUseCase`/`MediaRepository` code before
-  starting SearchScreen, not assumed from memory.
-- All five list-shape-fix files verified against `raw.githubusercontent.com`
-  post-push before moving on to SearchScreen.
-- **SearchScreen.kt was NOT similarly protected before its first push** —
-  it was declared complete without a build check, and without grepping
-  `build.gradle.kts` for the `Icons` dependency it used. This gap is why
-  the CI failure happened and is the specific mistake to avoid repeating.
-- Session closed (this time, after the fix) only once CI confirmed green
-  and the fix was verified live against the actual repo content — not
-  before.
+**A real bug was caught and fixed before any of this was pasted**, not
+after: `CreateProfileUseCase` / `ProfileRepositoryImpl.createProfile`
+pass `UserProfile.id` straight through to Room's `@PrimaryKey` column
+with zero ID-generation anywhere in that chain (confirmed by reading
+`ProfileRepositoryImpl.kt` and `ProfileEntity.kt` directly before
+writing the screen, per the project's standing "never write against
+assumed interfaces" rule). The initial screen draft would have created
+profiles with an empty-string ID. Fixed by generating
+`UUID.randomUUID().toString()` in `SettingsScreen.kt` at creation time
+(`java.util.UUID` — standard JDK, no new dependency risk, unlike the
+Session 22 icons situation).
 
-## Key Lessons & Principles (carried forward, still in force)
+Icon usage was deliberately conservative: no new `Icons.Filled.*` symbol
+was introduced beyond `Icons.Filled.Close` (already proven to compile
+via `HomeScreen.kt` earlier in this same session). All new actions
+(add/delete/rename/switch) use text buttons instead of icons, to avoid
+any repeat of Session 22's "assumed an icon was available without
+checking the declared dependency" failure mode.
+## Session 23 — Build Failures & Fixes (SettingsScreen.kt)
 
-- **Read actual files before writing any code** — non-negotiable. Sessions
-  14 and 16 had build failures from writing against assumed interfaces.
-  Session 22 applied this to catch the SearchResult list-shape bug
-  correctly, but then failed to apply the same discipline to a Gradle
-  dependency, causing the icons build failure. The lesson now explicitly
-  covers build files, not just Kotlin interfaces — see next bullet.
-- **NEW (Session 22): grep build.gradle.kts / libs.versions.toml before
-  importing anything from a library that hasn't been used elsewhere in the
-  codebase yet** — even common-seeming APIs (like Material `Icons`) may
-  not have their artifact declared. Don't assume a dependency exists just
-  because the API is well-known; check the actual declared dependencies
-  first.
-- **NEW (Session 22): don't declare a session or a file "done" without an
-  actual CI result.** Reasoning that code "should" compile is not the same
-  as knowing it does — this is the same principle as "build successful
-  doesn't confirm the intended code compiled," applied to the case where
-  no build has run at all yet, not just the case where it passed on the
-  wrong content.
-- **currentsprint.md on GitHub is the authoritative completion record** —
-  project file copies are a convenience cache only.
+Three build attempts before a green result. Documented in full because
+the failure pattern — not just the final fix — is the actual lesson for
+future sessions.
+
+**Attempt 1 — paste truncation, not a code defect.** The full
+~450-line file was given as one code block. What actually landed on
+GitHub was 531 lines, cut off mid-identifier
+(`preferences.preferredContentLang` with no closing) partway through
+the final function. This produced misleading-looking compiler errors
+(`Unresolved reference 'settingsErrorMessage'`,
+`Unresolved reference 'ThemePreferencesSection'`) that look like
+missing-definition bugs but were actually "the definitions exist, they
+just never arrived on GitHub." Diagnosed by pulling the live file via
+`raw.githubusercontent.com` and reading the actual tail of the file
+directly — confirmed truncation, not a code issue, before proposing any
+fix. Dia confirmed the copy/paste consistently truncated at the same
+spot across multiple attempts, indicating a Spck clipboard length
+limit rather than a one-off mistake.
+
+**Fix for Attempt 1:** the file was split into two sequential paste
+chunks at a safe boundary (end of `PreferencesSection`, before the
+shared UI helper composables), each given as its own complete code
+block with explicit instructions on where the split was and that the
+first chunk intentionally has no closing brace. This landed completely
+(571 lines, verified) on the next push.
+
+**Attempt 2 — a real bug, not a paste issue.** With the file now
+complete, CI failed with
+`@Composable invocations can only happen from the context of a
+@Composable function` at the line calling `settingsErrorMessage(...)`
+from inside `LaunchedEffect { }`. Root cause: `settingsErrorMessage`
+was declared `@Composable` (because it internally calls
+`stringResource()`), but `LaunchedEffect`'s block is a suspend lambda,
+not composable context — you cannot call a `@Composable` function from
+inside it. **Fix:** stopped resolving the error to a `String` inside
+`LaunchedEffect`; instead store the raw `AppError` in state
+(`pendingError: AppError?` replacing the old `errorMessage: String?`)
+and only call `settingsErrorMessage()` at the point where it's
+actually rendered — inside `AlertDialog`'s `text = { ... }` lambda,
+which is valid composable context. This was given as three small,
+precisely-located find/replace edits rather than a full-file
+replacement, specifically to avoid re-triggering the Attempt 1
+clipboard issue on an already-large file.
+
+**Attempt 3 — one of the three edits didn't land.** CI still failed:
+`Unresolved reference 'pendingError'` at the exact lines that should
+have declared and used it. Pulled the live file and diffed line-by-line
+rather than guessing which edit was missing. Found: 2 of 3 edits had
+landed correctly; the state *declaration* line
+(`var errorMessage by remember { mutableStateOf<String?>(null) }`) had
+not been changed to `var pendingError by remember { mutableStateOf<AppError?>(null) }` —
+every other line already referenced the not-yet-declared `pendingError`.
+**Fix:** the single missing line, given precisely, no ambiguity. Landed
+and confirmed via CI on the next push.
+
+**Generalizable lessons from this sequence:**
+
+- When a paste consistently truncates at the same point across
+  multiple attempts, that's a length/buffer signal — switch to
+  sequential chunked pastes at a safe syntactic boundary rather than
+  retrying the same full-file paste again.
+- When CI reports "unresolved reference" for something that looks like
+  it should obviously be defined, check whether the file actually
+  landed completely on GitHub *before* assuming the code itself is
+  wrong — Attempt 1's errors were paste-truncation symptoms wearing a
+  missing-definition costume.
+- `@Composable` functions cannot be called from `LaunchedEffect`,
+  `rememberCoroutineScope().launch { }`, `viewModelScope`, or any other
+  suspend/coroutine context — only from other `@Composable` functions.
+  If a helper needs `stringResource()`, either call it from composable
+  context and pass the resolved `String` in, or (as done here) delay
+  resolution until the value is actually rendered.
+- For small, targeted fixes to an already-large file, giving 2–3
+  precise find/replace edits rather than a full-file re-paste both
+  avoids re-triggering clipboard truncation and makes it easier to spot
+  exactly which edit didn't land, if any didn't.
+- **Verify every single line of a multi-part edit landed** — don't
+  assume 3-for-3 just because CI ran again; 2 of 3 landing correctly
+  still produces a full build failure, and the fastest diagnosis is
+  pulling the live file and diffing against exactly what was given,
+  line by line if needed.
+
+## Verification Method (standing practice, reconfirmed this session)
+
+`raw.githubusercontent.com` single-file pulls plus direct byte/line
+comparison against what was given, for every file, every push, no
+exceptions — this caught the Attempt 1 truncation immediately rather
+than after a confusing round of guessing at "code bugs" that didn't
+exist.
+
+For CI status specifically: `api.github.com`'s unauthenticated rate
+limit was hit twice this session (shared IP pool in this environment) —
+when that happens, the fallback is asking Dia for the direct Actions
+run URL or job URL and fetching it via `web_fetch`, which worked
+reliably both times. When the API is reachable directly (confirmed
+working again by end of session), it's preferable since it doesn't
+depend on Dia copying a URL — checked via:
+
+    curl -sL "https://api.github.com/repos/diaviloai/Onedebrid/actions/runs?per_page=3" \
+      -H "Accept: application/vnd.github+json"
+
+Both methods are legitimate; try the API first, fall back to asking for
+the run URL if rate-limited. Either way, a run must show
+`"conclusion": "success"` (API) or "Status: Success" (web view) before
+any file or session is declared done — a "build clean" or "pushed"
+report from Dia is a trigger to go verify, not a substitute for
+verifying.
+
+## Key Learnings & Principles (cumulative, all still in force)
+
+- **Read actual files before writing any code** — non-negotiable.
+  Sessions 14, 16, and 22 all had build failures traceable to writing
+  against assumed interfaces. Session 23's UUID-generation catch
+  (ProfileRepositoryImpl) is a case of this working correctly:
+  reading the actual repository implementation before writing the
+  screen caught a real bug before it was ever pasted.
+- **Grep build.gradle.kts / libs.versions.toml before importing
+  anything from a library not yet used elsewhere in the codebase** —
+  even common-seeming APIs may not have their artifact declared.
+  Session 23 applied this conservatively for Settings: rather than
+  research whether additional `Icons.Filled.*` symbols beyond `Close`
+  were safe, the screen simply avoided introducing any new icon
+  symbols at all, using text buttons instead.
+- **Don't declare a session or a file "done" without an actual CI
+  result** — checked via the GitHub Actions API or a direct run/job
+  URL fetch, not inferred from "build clean" or "pushed" alone. This
+  caught nothing new this session (Dia's reports were accurate every
+  time), but remains the standing verification step regardless.
+- **When a paste truncates at a consistent point across retries,
+  that's a signal to chunk the paste, not retry it unchanged.** New
+  lesson from Session 23 — see "Build Failures & Fixes" above for full
+  detail.
+- **`@Composable` functions are only callable from other `@Composable`
+  functions** — not from `LaunchedEffect`, coroutine scopes, or other
+  suspend contexts. New lesson from Session 23.
+- **currentsprint.md on GitHub is the authoritative completion
+  record** — project file copies are a convenience cache only.
 - **Flow collection:** always `flow.onEach{}.launchIn(viewModelScope)`,
   never `viewModelScope.launch { flow.collect() }`.
-- **PlaybackState naming collision:** `CoordinatorState` (sealed interface,
-  PlaybackCoordinator.kt) vs `PlayerLifecycleState` (enum, SessionState.kt)
-  — resolved via import aliases. Reuse these exact names if a file needs
-  both types again.
-- **onCleared() cannot reliably run suspend work** — fix belongs in Compose
-  screens via `DisposableEffect(Unit).onDispose`, as PlayerScreen.kt does.
-- **ExoPlayer instance belongs in the Compose screen, not the ViewModel.**
-- **Jetpack Navigation Compose cannot pass domain objects as nav args** —
-  PendingPlaybackHolder singleton is the workaround; does not survive
-  process death (documented in the file).
-- **MutableStateFlow.update{} does not resolve in this build environment**
-  — use direct `_flow.value = _flow.value?.copy(...)` assignment instead.
+- **PlaybackState naming collision:** `CoordinatorState` (sealed
+  interface, PlaybackCoordinator.kt) vs `PlayerLifecycleState` (enum,
+  SessionState.kt) — resolved via import aliases. Reuse these exact
+  names if a file needs both types again.
+- **onCleared() cannot reliably run suspend work** — fix belongs in
+  Compose screens via `DisposableEffect(Unit).onDispose`, as
+  PlayerScreen.kt does.
+- **ExoPlayer instance belongs in the Compose screen, not the
+  ViewModel.**
+- **Jetpack Navigation Compose cannot pass domain objects as nav
+  args** — PendingPlaybackHolder singleton is the workaround; does not
+  survive process death (documented in the file).
+- **MutableStateFlow.update{} does not resolve in this build
+  environment** — use direct `_flow.value = _flow.value?.copy(...)`
+  assignment instead.
 - **CI/build environment:** GitHub Actions runners are fresh (no local
   build cache); `gradle-wrapper.jar` handled via
   `gradle/actions/setup-gradle@v3`.
-- **Verify pushed file contents directly, don't infer from build status** —
-  re-pull and diff against GitHub before treating any edit as landed.
-- **A use case/coordinator/repository chain returning a singular type where
-  the domain clearly implies a collection is worth checking explicitly
-  before building a screen against it** (Session 22 SearchResult example).
+- **Verify pushed file contents directly, don't infer from build
+  status** — re-pull and diff against GitHub before treating any edit
+  as landed.
+- **A use case/coordinator/repository chain returning a singular type
+  where the domain clearly implies a collection is worth checking
+  explicitly before building a screen against it** (Session 22
+  SearchResult example).
 
 ## Next Steps, In Order
 
-1. **Wire SearchScreen into NavGraph.kt.** Add `Route.Search`, add a
-   `composable(Route.Search.path) { SearchScreen(...) }` entry, decide how
-   the user reaches Search from Home (Home is still a placeholder, so this
-   may mean Search becomes the temporary start destination, or Home's
-   placeholder gets a button to it — decide with Dia rather than assuming).
-2. **HomeScreen.kt** (real Composable, replacing NavGraph's inline
-   placeholder). HomeViewModel already exists.
-3. Settings/Profile screen (real Composable) — ProfileViewModel exists.
-4. Continue Watching persistence gap: `SavePlaybackPositionUseCase`
+1. **Continue Watching persistence gap.** `SavePlaybackPositionUseCase`
    currently only updates in-memory `SessionState`, not the Room-backed
-   ContinueWatchingEntity table.
-5. Media cache/lookup layer — not yet started. Would eventually let the nav
-   graph pass a bare `mediaId` as a real nav arg, fix
-   PendingPlaybackHolder's process-death gap, and let SearchScreen route
-   TV_SHOW results to an episode-picker screen instead of marking them
-   unsupported.
-6. Episode-picker screen / Details screen — not started. Needed to lift
-   Session 22's TV_SHOW limitation in SearchScreen.
-7. Stream-candidate picker UI — not started. Needed to lift Session 22's
-   Smart-Defaults-only limitation in SearchScreen.
+   `ContinueWatchingEntity` table. Not persisted end-to-end yet.
+2. **Media cache/lookup layer.** Not yet started. Would let the nav
+   graph pass a bare `mediaId` as a real nav arg instead of
+   `PendingPlaybackHolder`, fix the process-death gap, let SearchScreen
+   route TV_SHOW results to a real episode-picker instead of marking
+   them unsupported, and — newly relevant after Session 23 — let
+   HomeScreen's Continue Watching rows become tappable/resumable and
+   show real titles instead of raw `mediaId` strings.
+3. **Episode-picker screen / Details screen.** Not started. Needed to
+   lift SearchScreen's TV_SHOW limitation (Session 22) and would also
+   give Continue Watching rows somewhere meaningful to navigate once
+   the Media lookup layer exists.
+4. **Stream-candidate picker UI.** Not started. Needed to lift
+   SearchScreen's Smart-Defaults-only limitation (Session 22).
+5. **`AppError.ValidationError` case.** Would let
+   CreateProfileUseCase/UpdateProfileUseCase's blank-name validation
+   and DeleteProfileUseCase's delete-active-profile rejection surface
+   proper, distinct user-facing messages instead of both falling
+   through SettingsScreen's generic `LocalStorageError` message. Low
+   urgency (the UI already avoids the delete-active case proactively)
+   but worth doing whenever the broader error model gets a review
+   pass.
+6. **SettingsScreen preference-write debounce/Save-step reconsideration**
+   — only if it turns out to feel laggy on-device; not a confirmed
+   problem, just flagged for revisit (see Known Limitations above).
 
 ## Open TODOs (carried forward, unchanged unless noted)
 
@@ -322,30 +436,42 @@ framing given before this fix as inaccurate; this section supersedes it.
 - SearchRepository.updateSearchSession uses `Map<String, String>` for
   filters; revisit if SearchFilters gets promoted to a domain model
 - AppError has no ValidationError case; CreateProfileUseCase and
-  UpdateProfileUseCase use LocalStorageError(IllegalArgumentException) for
-  blank name validation — semantically incorrect; revisit when the error
-  model gets a review pass
+  UpdateProfileUseCase use LocalStorageError(IllegalArgumentException)
+  for blank name validation — semantically incorrect; revisit when the
+  error model gets a review pass. **Now also affects
+  DeleteProfileUseCase's active-profile rejection, surfaced via
+  SettingsScreen — see Next Steps #5.**
 - StartPlaybackUseCase uses a fully qualified AppError reference inline;
   tidy to a top-level import if preferred
 - HomeViewModel.removeItem() has no failure feedback path —
-  PlaybackRepository.removeFromContinueWatching() returns Unit; deliberately
-  deferred (Session 16)
-- HomeViewModel.kt has a fully-qualified kotlinx.coroutines.Job reference
-  inline instead of a top-level import (Session 16) — not yet tidied
-- NavGraph's home route is an inline placeholder Composable, not real UI
-- NavGraph's Search route is not declared and SearchScreen is not
-  reachable — see Next Steps #1
+  PlaybackRepository.removeFromContinueWatching() returns Unit;
+  deliberately deferred (Session 16)
+- HomeViewModel.kt has a fully-qualified kotlinx.coroutines.Job
+  reference inline instead of a top-level import (Session 16) — not
+  yet tidied
 - SearchScreen.kt uses fully-qualified
   `androidx.compose.foundation.text.KeyboardActions`/`KeyboardOptions`
-  inline rather than top-level imports, to avoid a possible import-name
-  collision that couldn't be verified without seeing the exact Compose BOM
-  version pinned in build.gradle.kts. Revisit and tidy to top-level imports
-  once confirmed safe.
+  inline rather than top-level imports, to avoid a possible
+  import-name collision that couldn't be verified without seeing the
+  exact Compose BOM version pinned in build.gradle.kts. Revisit and
+  tidy to top-level imports once confirmed safe.
 - SearchScreen's TV_SHOW tap-disabled state and Smart-Defaults-only
   playback are both deliberate, documented limitations, not bugs.
+- **NEW (Session 23):** `DropdownField<T>` in SettingsScreen.kt is a
+  simple `TextButton` + `DropdownMenu` implementation, not Material
+  3's `ExposedDropdownMenuBox`. Functional, but not the "official"
+  M3 dropdown pattern (which has its own anchor/positioning
+  requirements). Fine as-is; revisit only if visual polish on
+  Settings becomes a priority.
+- **NEW (Session 23):** No language list/picker exists — subtitle,
+  audio, and content-language preferences are all free-text BCP-47
+  code entry fields with a hint string, not validated or
+  autocompleted. Revisit if a proper language picker becomes worth
+  building.
 
-At the end of the next session, update currentsprint.md (full file, in a
-code block) and verify it directly against
-raw.githubusercontent.com/diaviloai/Onedebrid/main/currentsprint.md before
-treating the session as closed — and do not treat any session as closed
-without an actual green CI result for whatever was last pushed.
+At the end of the next session, update currentsprint.md (full file, in
+a code block) and verify it directly against
+raw.githubusercontent.com/diaviloai/Onedebrid/main/currentsprint.md
+before treating the session as closed — and do not treat any session
+as closed without an actual green CI result for whatever was last
+pushed.
