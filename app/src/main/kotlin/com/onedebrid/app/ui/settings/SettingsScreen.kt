@@ -219,13 +219,6 @@ private fun ProfilesSection(
             ProfileRow(
                 profile = profile,
                 isActive = profile.id == activeProfile.id,
-                // A profile can't be deleted while it's the active one —
-                // DeleteProfileUseCase enforces this server-side; disabling
-                // the button here just avoids sending a request that's
-                // guaranteed to fail, per Technical_standards.md's Smart
-                // Defaults-adjacent principle of not making the user
-                // discover a rule via an error dialog when the UI can
-                // reflect it directly.
                 canDelete = profile.id != activeProfile.id,
                 onSwitch = { onSwitch(profile.id) },
                 onRename = { onRename(profile) },
@@ -317,15 +310,6 @@ private fun ProfileNameDialog(
 
 // ── Preferences Section ─────────────────────────────────────────────────
 
-/**
- * Editor for all four UserProfile preference groups, scoped to the active
- * profile. Each control edits a local draft and commits the full,
- * copy()-derived UserProfile via onProfileUpdated on change — there is no
- * separate "Save" step for preferences (unlike the profile name dialogs,
- * which do batch a name edit behind Save/Cancel). This matches Smart
- * Defaults' philosophy of minimizing required interaction: toggling a
- * switch should not require a second confirming tap.
- */
 @Composable
 private fun PreferencesSection(
     activeProfile: UserProfile,
@@ -359,7 +343,6 @@ private fun PreferencesSection(
         )
     }
 }
-
 @Composable
 private fun SectionHeader(text: String) {
     Text(
@@ -452,8 +435,6 @@ private fun PlaybackPreferencesSection(
         DropdownField(
             label = stringResource(R.string.settings_preferred_quality),
             selected = preferences.preferredQuality,
-            // UNKNOWN is a stream-parsing fallback (StreamSource.kt), not a
-            // meaningful user preference, so it is excluded from this list.
             options = VideoQuality.entries.filter { it != VideoQuality.UNKNOWN },
             optionLabel = { it.name },
             onSelect = { onChange(preferences.copy(preferredQuality = it)) }
@@ -493,9 +474,6 @@ private fun SubtitlePreferencesSection(
             onValueChange = { onChange(preferences.copy(preferredLanguageCode = it)) }
         )
 
-        // Represents SubtitleFormat? (nullable) as a fixed option list with
-        // an explicit "No preference" entry standing in for null, since
-        // DropdownField is typed non-null for simplicity.
         val noPreferenceLabel = stringResource(R.string.settings_subtitle_format_none)
         DropdownField(
             label = stringResource(R.string.settings_subtitle_format),
@@ -529,4 +507,66 @@ private fun SearchPreferencesSection(
 
         LanguageCodeField(
             label = stringResource(R.string.settings_content_language),
-            value = preferences.preferredContentLang
+            value = preferences.preferredContentLanguage,
+            onValueChange = { onChange(preferences.copy(preferredContentLanguage = it)) }
+        )
+    }
+}
+
+@Composable
+private fun ThemePreferencesSection(
+    preferences: ThemePreferences,
+    onChange: (ThemePreferences) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SectionHeader(stringResource(R.string.settings_section_theme))
+
+        SwitchRow(
+            label = stringResource(R.string.settings_dynamic_color),
+            checked = preferences.useDynamicColor,
+            onCheckedChange = { onChange(preferences.copy(useDynamicColor = it)) }
+        )
+
+        val systemLabel = stringResource(R.string.settings_dark_mode_system)
+        val onLabel = stringResource(R.string.settings_dark_mode_on)
+        val offLabel = stringResource(R.string.settings_dark_mode_off)
+        DropdownField(
+            label = stringResource(R.string.settings_dark_mode),
+            selected = preferences.darkMode,
+            options = listOf(null, true, false),
+            optionLabel = {
+                when (it) {
+                    null -> systemLabel
+                    true -> onLabel
+                    false -> offLabel
+                }
+            },
+            onSelect = { onChange(preferences.copy(darkMode = it)) }
+        )
+    }
+}
+
+/**
+ * User-facing copy for AppError cases relevant to profile operations.
+ *
+ * Matches SearchScreen's and PlayerScreen's local errorMessage() convention
+ * — AppError stays presentation-agnostic (Technical_standards.md).
+ * LocalStorageError's cause is deliberately not surfaced (AppError.kt's own
+ * doc comment: "Not shown to the user directly"), including the blank-name
+ * validation case from CreateProfileUseCase/UpdateProfileUseCase and the
+ * "cannot delete active profile" case from DeleteProfileUseCase — both
+ * currently arrive as LocalStorageError per the Open TODOs note that
+ * AppError has no ValidationError case yet. A generic message is shown
+ * either way; this is a known, tracked limitation, not something this
+ * screen works around.
+ */
+@Composable
+private fun settingsErrorMessage(error: AppError): String = when (error) {
+    is AppError.LocalStorageError -> stringResource(R.string.settings_error_generic)
+    is AppError.Unknown -> stringResource(R.string.settings_error_generic)
+    is AppError.NoNetworkConnection -> stringResource(R.string.player_error_no_network)
+    is AppError.AllProvidersUnavailable -> stringResource(R.string.search_error_providers_unavailable)
+    is AppError.NotAuthenticated -> stringResource(R.string.player_error_not_authenticated)
+    is AppError.NoCachedStreamAvailable -> stringResource(R.string.settings_error_generic)
+    is AppError.StreamResolutionFailed -> stringResource(R.string.settings_error_generic)
+}
