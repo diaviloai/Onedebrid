@@ -44,7 +44,11 @@ interface PlaybackRepository {
      *
      * [episodeId] is null for movies. For TV episodes, both
      * [mediaId] (the show) and [episodeId] are required to
-     * unambiguously identify what was watched.
+     * unambiguously identify what was watched. [seasonNumber] and
+     * [episodeNumber] are likewise null for movies and non-null for TV
+     * episodes — they exist purely for display (Continue Watching rows
+     * showing "S2 E4" rather than a raw episodeId) and carry no lookup
+     * meaning of their own.
      *
      * [positionMs] is the current position in milliseconds.
      * [durationMs] is the total duration in milliseconds, used to
@@ -54,6 +58,8 @@ interface PlaybackRepository {
         profileId: String,
         mediaId: String,
         episodeId: String?,
+        seasonNumber: Int?,
+        episodeNumber: Int?,
         positionMs: Long,
         durationMs: Long
     )

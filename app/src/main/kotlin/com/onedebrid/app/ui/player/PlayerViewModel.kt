@@ -74,10 +74,15 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    // Tracks the last position reported by the player screen so the
-    // periodic ticker has something to save without the screen needing to
-    // call a separate "tick" method itself.
+    // Tracks the last position and duration reported by the player screen so
+    // the periodic ticker has something to save without the screen needing
+    // to call a separate "tick" method itself. durationMs is cached the same
+    // way as positionMs even though it doesn't change during a single
+    // playback session — ExoPlayer.duration is the only source of it (no
+    // domain model carries media duration), and only the screen holds the
+    // ExoPlayer instance, so it must be reported the same way position is.
     private var lastKnownPositionMs: Long = 0L
+    private var lastKnownDurationMs: Long = 0L
 
     private var positionSaveJob: Job? = null
 
@@ -125,9 +130,22 @@ class PlayerViewModel @Inject constructor(
      * positionMs is the player's currentPosition at the moment of the
      * callback. It is cached for the periodic ticker and, on PAUSED/ENDED,
      * saved immediately rather than waiting for the next tick.
+     *
+     * durationMs is the player's duration at the moment of the callback.
+     * ExoPlayer can report C.TIME_UNSET (-9223372036854775807L) before a
+     * stream has loaded enough to know its duration — the screen is
+     * responsible for passing whatever ExoPlayer.duration currently
+     * returns, and this ViewModel caches it as-is. SavePlaybackPositionUseCase
+     * and the underlying Room write both treat this as an opaque Long, so an
+     * occasional C.TIME_UNSET value in early playback is not corrected here;
+     * it would only affect a completion-percentage calculation, which is not
+     * yet implemented as of Session 24 (see PlaybackRepository.saveProgress
+     * doc comment — durationMs is currently stored but not yet consumed for
+     * completion percentage or markAsCompleted thresholding).
      */
-    fun onPlayerStateChanged(newState: PlayerLifecycleState, positionMs: Long) {
+    fun onPlayerStateChanged(newState: PlayerLifecycleState, positionMs: Long, durationMs: Long) {
         lastKnownPositionMs = positionMs
+        lastKnownDurationMs = durationMs
         _uiState.value = _uiState.value.copy(playerLifecycleState = newState)
 
         when (newState) {
@@ -135,7 +153,7 @@ class PlayerViewModel @Inject constructor(
             PlayerLifecycleState.PAUSED, PlayerLifecycleState.ENDED -> {
                 stopPositionSaving()
                 viewModelScope.launch {
-                    savePlaybackPositionUseCase(positionMs)
+                    savePlaybackPositionUseCase(positionMs, durationMs)
                 }
             }
             else -> stopPositionSaving()
@@ -153,7 +171,7 @@ class PlayerViewModel @Inject constructor(
         positionSaveJob = viewModelScope.launch {
             while (true) {
                 delay(POSITION_SAVE_INTERVAL_MS)
-                savePlaybackPositionUseCase(lastKnownPositionMs)
+                savePlaybackPositionUseCase(lastKnownPositionMs, lastKnownDurationMs)
             }
         }
     }

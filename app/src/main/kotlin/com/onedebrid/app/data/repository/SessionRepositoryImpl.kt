@@ -26,6 +26,8 @@ class SessionRepositoryImpl @Inject constructor() : SessionRepository {
     override fun observeSession(): Flow<SessionState> =
         _session.asStateFlow().filterNotNull()
 
+    override fun getCurrentSession(): SessionState? = _session.value
+
     override suspend fun startPlaybackSession(
         request: PlaybackRequest,
         stream: StreamSource

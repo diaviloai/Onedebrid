@@ -48,8 +48,9 @@ import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
  * Technical_standards.md). This screen creates and owns the ExoPlayer
  * instance, feeds it the resolved StreamSource once CoordinatorState becomes
  * Ready, and reports every lifecycle change back to the ViewModel via
- * onPlayerStateChanged(newState, positionMs) — the ViewModel has no other
- * way to know what the player is actually doing or where it currently is.
+ * onPlayerStateChanged(newState, positionMs, durationMs) — the ViewModel
+ * has no other way to know what the player is actually doing or where it
+ * currently is.
  *
  * request/profileId are no longer accepted as plain parameters. They are
  * read from PendingPlaybackHolder on entry — see that file for why nav args
@@ -149,7 +150,7 @@ fun PlayerScreen(
                     Player.STATE_ENDED -> PlayerLifecycleState.ENDED
                     else -> PlayerLifecycleState.IDLE
                 }
-                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition)
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -160,11 +161,11 @@ fun PlayerScreen(
                 } else {
                     PlayerLifecycleState.PAUSED
                 }
-                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition)
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.onPlayerStateChanged(PlayerLifecycleState.ERROR, exoPlayer.currentPosition)
+                viewModel.onPlayerStateChanged(PlayerLifecycleState.ERROR, exoPlayer.currentPosition, exoPlayer.duration)
             }
         }
         exoPlayer.addListener(listener)

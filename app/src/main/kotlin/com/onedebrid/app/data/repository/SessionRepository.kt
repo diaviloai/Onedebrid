@@ -27,6 +27,19 @@ interface SessionRepository {
     fun observeSession(): Flow<SessionState>
 
     /**
+     * Synchronously read the current session state without collecting a Flow.
+     *
+     * Returns null if the session has not been initialised yet (initialise()
+     * has not been called), matching observeSession()'s underlying null-until-
+     * initialised state before its filterNotNull(). Intended for call sites
+     * that need a one-off snapshot rather than an ongoing subscription — e.g.
+     * SavePlaybackPositionUseCase reading profileId/mediaId/episodeId once per
+     * position-save call, where collecting a Flow would be unnecessary
+     * overhead for a value that's only read, not observed.
+     */
+    fun getCurrentSession(): SessionState?
+
+    /**
      * Start a new playback session for the given request and resolved stream.
      */
     suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource)

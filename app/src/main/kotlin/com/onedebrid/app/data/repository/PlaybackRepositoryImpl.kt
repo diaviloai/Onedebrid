@@ -41,6 +41,8 @@ class PlaybackRepositoryImpl @Inject constructor(
         profileId: String,
         mediaId: String,
         episodeId: String?,
+        seasonNumber: Int?,
+        episodeNumber: Int?,
         positionMs: Long,
         durationMs: Long
     ): Unit = withContext(dispatchers.io) {
@@ -48,6 +50,8 @@ class PlaybackRepositoryImpl @Inject constructor(
             profileId = profileId,
             mediaId = mediaId,
             episodeId = episodeId,
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
             positionMs = positionMs,
             durationMs = durationMs,
             lastWatchedAt = System.currentTimeMillis(),
