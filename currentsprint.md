@@ -8,16 +8,14 @@ This file is fully rewritten each session — it reflects actual current
 code state, verified by pulling the repo and reading files directly, not
 appended to informally.
 
-Build verification: project compiles cleanly as of Session 23's close,
-confirmed via GitHub Actions CI on commit `d66318a3` ("update
-SettingsScreen.kt"), checked directly via the GitHub Actions API
+Build verification: project compiles cleanly as of Session 24's close,
+confirmed via GitHub Actions CI on commit `ad1a5d98` ("update"), checked
+directly via the GitHub Actions API
 (`api.github.com/repos/diaviloai/Onedebrid/actions/runs`) — status
-`completed`, conclusion `success`. This is the fourth CI result checked
-this session; the first three (SearchScreen→NavGraph wiring succeeded
-cleanly, HomeScreen succeeded cleanly, but SettingsScreen.kt failed twice
-before succeeding) are detailed below in "Session 23 — Build Failures &
-Fixes," since the failure pattern itself is a real lesson for future
-sessions, not just a footnote.
+`completed`, conclusion `success`. All 7 files touched this session were
+also independently verified byte-for-byte against
+`raw.githubusercontent.com` (cross-checked against a fresh full-repo
+tarball pull too, to rule out CDN lag) before this file was updated.
 
 ## Package Structure
 
@@ -62,9 +60,11 @@ com.onedebrid.app/
     │   │   └── AppError.kt
     │   └── model/
     │       ├── Media.kt
+    │       ├── Episode.kt
     │       ├── PlaybackRequest.kt
     │       ├── SearchResult.kt
-    │       ├── SessionState.kt
+    │       ├── SessionState.kt (SessionState, PlaybackSession,
+    │       │   SearchSession, PlaybackState enum)
     │       ├── StreamSource.kt (VideoQuality enum)
     │       ├── SubtitleTrack.kt (SubtitleFormat enum)
     │       ├── UserProfile.kt (PlaybackPreferences, SubtitlePreferences,
@@ -91,8 +91,10 @@ com.onedebrid.app/
     └── usecase/
         ├── CreateProfileUseCase.kt
         ├── DeleteProfileUseCase.kt
+        ├── EndPlaybackSessionUseCase.kt
         ├── GetContinueWatchingUseCase.kt
         ├── RemoveFromContinueWatchingUseCase.kt
+        ├── SavePlaybackPositionUseCase.kt
         ├── SearchMediaUseCase.kt
         ├── SwitchProfileUseCase.kt
         ├── UpdateProfileUseCase.kt
@@ -102,10 +104,9 @@ com.onedebrid.app/
 not a guaranteed exhaustive listing — see the repo itself for ground
 truth on files not mentioned in recent session notes.)
 
-## App Navigation State (as of Session 23)
+## App Navigation State (as of Session 23, unchanged this session)
 
-All four primary screens now exist and are wired into a single
-`NavGraph.kt`:
+All four primary screens exist and are wired into a single `NavGraph.kt`:
 
 - **Home** (`Route.Home`, start destination) → real `HomeScreen.kt`.
   Shows Continue Watching (list, not resumable yet — see Known
@@ -132,9 +133,11 @@ worked around)
 - **HomeScreen Continue Watching rows are not tappable to resume
   playback.** `WatchedItem` only carries `mediaId` + progress/episode
   context, never a full `Media` object. `PlaybackRequest` requires a
-  full `Media`. No Media cache/lookup layer exists yet (Next Steps #2,
-  in chunk 2) to turn a bare `mediaId` back into a `Media`. Rows show
-  mediaId + progress % only, with a Remove action.
+  full `Media`. No Media cache/lookup layer exists yet (Next Steps #1,
+  now the top item) to turn a bare `mediaId` back into a `Media`. Rows
+  show mediaId + progress % only, with a Remove action. Progress now
+  persists correctly across app restarts as of Session 24 — this
+  limitation is purely about tap-to-resume UI, not data persistence.
 - **SearchScreen TV_SHOW results are non-interactive** (no
   episode-picker yet) — from Session 22, still true.
 - **SearchScreen playback always uses Smart Defaults**
@@ -154,222 +157,167 @@ worked around)
   row to avoid the user hitting this in the common case, but the
   underlying generic-message gap still exists for the create/rename
   blank-name case.
+- **NEW (Session 24): durationMs stored in Continue Watching is not
+  yet consumed for anything.** It is correctly captured
+  (`ExoPlayer.duration`, threaded through `PlayerViewModel` →
+  `SavePlaybackPositionUseCase` → `PlaybackRepository.saveProgress()` →
+  `ContinueWatchingEntity.durationMs`) and persists correctly, but
+  nothing yet calculates a completion percentage from it or uses it to
+  drive `markAsCompleted()`'s ~90% threshold — `markAsCompleted()` is a
+  separate method that must still be called explicitly by a caller
+  that isn't wired up yet. `ExoPlayer.duration` can also report
+  `C.TIME_UNSET` before a stream has buffered enough to know its
+  length; this is stored as-is (see `PlayerViewModel.onPlayerStateChanged`
+  doc comment) and would need handling once duration is actually
+  consumed for a calculation.
 
-## Session 23 — What Was Done
+## Session 24 — What Was Done
 
-All three items completed and independently CI-verified (checked via
-`api.github.com/repos/diaviloai/Onedebrid/actions/runs`, not just
-inferred from "build clean" reports — see rationale in "Verification
-Method" in chunk 2 below).
+**Continue Watching persistence gap closed** (was Next Steps #1 at the
+top of this session). Independently CI-verified: commit `ad1a5d98`
+("update"), CI run `https://github.com/diaviloai/Onedebrid/actions/runs/32076694359` —
+**success**. All 7 touched files verified byte-for-byte against
+`raw.githubusercontent.com` (and cross-checked against a fresh tarball
+pull) before this session was treated as done.
 
-### 1. Wired SearchScreen into NavGraph.kt
+### The problem
 
-Added `Route.Search`. Decided with Dia (explicit choice, not assumed):
-Home stays the start destination; a "Search" button was added to the
-then-placeholder Home route to make Search reachable. `NavGraph.kt`
-rewritten in full. Verified byte-for-byte against
-`raw.githubusercontent.com`. CI run
-`https://github.com/diaviloai/Onedebrid/actions/runs/31959197234` —
-**success**.
+`SavePlaybackPositionUseCase` only ever called
+`SessionRepository.updatePlaybackPosition()` — updating the in-memory
+`SessionState` only. It never called `PlaybackRepository.saveProgress()`,
+the method that actually writes to the Room-backed
+`ContinueWatchingEntity` table. That Room-side plumbing
+(`saveProgress()`, `ContinueWatchingDao.upsertProgress()`, the entity
+itself) was already correct and had been since an earlier session — it
+was simply never invoked. Continue Watching progress did not survive an
+app restart before this fix.
 
-### 2. HomeScreen.kt (new) — replaces NavGraph's inline placeholder
+### Root-cause read-through (done before writing anything, per standing
+practice)
 
-New file, wired into `NavGraph.kt` in place of the placeholder Composable
-used since Session 21. Shows Continue Watching via `HomeViewModel`
-(already existed, no changes needed to it). Loading/empty/list states.
-Rows show `mediaId` + a computed progress percentage (new
-`home_continue_watching_progress` string resource, `%1$d%% watched`
-format) with a Remove action. Deliberately **not** tappable — see Known
-Limitations above for why (`WatchedItem` has no `Media`). `strings.xml`
-updated (Home section added). Verified byte-for-byte. CI run
-`https://github.com/diaviloai/Onedebrid/actions/runs/31960490550` —
-**success**.
+Read `SavePlaybackPositionUseCase.kt`, `PlaybackRepository.kt` /
+`PlaybackRepositoryImpl.kt`, `SessionRepository.kt` /
+`SessionRepositoryImpl.kt`, `SessionState.kt`, `Episode.kt`,
+`PlayerViewModel.kt`, and `PlayerScreen.kt` directly before drafting any
+change. This surfaced two things:
 
-### 3. SettingsScreen.kt (new) — full preferences editor
+1. `SessionRepository` had no synchronous way to read the current
+   session — only `observeSession(): Flow<SessionState>`. Needed a
+   snapshot read so `SavePlaybackPositionUseCase` could grab
+   `profileId`/`mediaId`/`episodeId` without collecting a Flow on every
+   position-save tick.
+2. **A second, separate pre-existing bug**, found while reading
+   `PlaybackRepositoryImpl.saveProgress()`: it built
+   `ContinueWatchingEntity` without ever setting `seasonNumber` /
+   `episodeNumber`, even though the entity has both columns and
+   `HomeScreen` reads them off `WatchedItem`. This meant TV episode
+   Continue Watching rows would always have shown null season/episode,
+   independent of the main persistence gap. Confirmed with Dia
+   explicitly before fixing (not assumed) — decision was to fix it in
+   the same session since it was directly adjacent and low-risk.
+3. No domain model anywhere carries media duration — `ExoPlayer.duration`
+   (read in `PlayerScreen.kt`) is the only source of it. This meant
+   `durationMs` had to be threaded as a new parameter through
+   `PlayerViewModel.onPlayerStateChanged()` and its ticker, not read
+   from session state like the other fields.
 
-Scope decided explicitly with Dia: full editor for all four
-`UserProfile` preference groups (playback, subtitles, search, theme) in
-this session, not deferred. New file. Two responsibilities:
+### Design decisions made explicitly with Dia before writing code
 
-- **Profile management:** list all profiles, switch active, create new
-  (name-entry dialog), rename (same dialog, prefilled), delete
-  (disabled in the UI for the currently-active profile, since
-  `DeleteProfileUseCase` rejects deleting the active profile
-  server-side — UI reflects the rule rather than letting the user
-  discover it via an error).
-- **Preference editing**, scoped to the active profile only (no
-  per-profile "select which profile you're editing" UI — Smart
-  Defaults always apply to whichever profile is active). Each group
-  (Playback / Subtitles / Search / Theme) is its own private composable
-  section. Controls: `Switch` for booleans, a custom `DropdownField<T>`
-  for enums and nullable tri-state values (`VideoQuality` excluding
-  `UNKNOWN`; `SubtitleFormat?` with an explicit "No preference" entry
-  standing in for `null`; `darkMode: Boolean?` as a 3-way System/On/Off
-  dropdown), and a free-text `OutlinedTextField` for BCP-47 language
-  codes (no language list/lookup exists in the codebase to back a
-  proper picker yet).
+- **Session snapshot approach:** added `SessionRepository.getCurrentSession(): SessionState?`
+  (backed by the existing `MutableStateFlow`'s `.value`) rather than
+  having the use case do `observeSession().first()` on every call —
+  chosen for simplicity and to avoid flow-collection overhead on a
+  5-second ticker.
+- **seasonNumber/episodeNumber fix scope:** confirmed to fix it now
+  rather than deferring to a future error-model-style cleanup pass,
+  since the entity columns already existed and the fix was small and
+  isolated to `PlaybackRepository`/`PlaybackRepositoryImpl`.
 
-`HomeScreen.kt` updated to add a `onNavigateToSettings` callback + a
-second TopAppBar action. `NavGraph.kt` updated to add `Route.Settings`
-and wire `SettingsScreen()` as a leaf destination. `strings.xml`
-extended with a `Settings` section (~30 new strings) plus
-`home_settings_action`.
+### Files changed (all given as complete file contents, one at a time,
+per standard workflow — no file in this batch was large enough to need
+clipboard chunking)
 
-**A real bug was caught and fixed before any of this was pasted**, not
-after: `CreateProfileUseCase` / `ProfileRepositoryImpl.createProfile`
-pass `UserProfile.id` straight through to Room's `@PrimaryKey` column
-with zero ID-generation anywhere in that chain (confirmed by reading
-`ProfileRepositoryImpl.kt` and `ProfileEntity.kt` directly before
-writing the screen, per the project's standing "never write against
-assumed interfaces" rule). The initial screen draft would have created
-profiles with an empty-string ID. Fixed by generating
-`UUID.randomUUID().toString()` in `SettingsScreen.kt` at creation time
-(`java.util.UUID` — standard JDK, no new dependency risk, unlike the
-Session 22 icons situation).
+1. **`SessionRepository.kt`** — added
+   `fun getCurrentSession(): SessionState?`.
+2. **`SessionRepositoryImpl.kt`** — implemented as `_session.value`.
+3. **`PlaybackRepository.kt`** — `saveProgress()` gained `seasonNumber: Int?`
+   and `episodeNumber: Int?` parameters (matching the existing
+   `recordPlayed()` pattern for consistency).
+4. **`PlaybackRepositoryImpl.kt`** — `saveProgress()` now passes the two
+   new parameters through into `ContinueWatchingEntity`.
+5. **`SavePlaybackPositionUseCase.kt`** — signature changed from
+   `invoke(positionMs: Long)` to `invoke(positionMs: Long, durationMs: Long)`.
+   Body now does two writes: the existing in-memory
+   `SessionRepository.updatePlaybackPosition()` call, then reads
+   `getCurrentSession()` and — if a session and an active `playback` both
+   exist — calls `PlaybackRepository.saveProgress()` with
+   `profileId`/`mediaId`/`episodeId`/`seasonNumber`/`episodeNumber` all
+   pulled from the session snapshot, plus the passed-in `positionMs`/
+   `durationMs`. If there's no active playback session, only the (already
+   no-op-safe) in-memory update runs — the Room write is skipped since
+   there's nothing to attach it to.
+6. **`PlayerViewModel.kt`** — `onPlayerStateChanged()` signature changed
+   from `(newState, positionMs)` to `(newState, positionMs, durationMs)`.
+   Added a `lastKnownDurationMs` field alongside the existing
+   `lastKnownPositionMs`, cached the same way, read by the periodic
+   ticker. Both the ticker and the immediate PAUSED/ENDED save now pass
+   `durationMs` through to `SavePlaybackPositionUseCase`.
+7. **`PlayerScreen.kt`** — all three `Player.Listener` callback sites
+   (`onPlaybackStateChanged`, `onIsPlayingChanged`, `onPlayerError`) now
+   pass `exoPlayer.duration` as the new third argument. One stale doc
+   comment (old two-arg signature mentioned in the class doc) was also
+   corrected while in the file.
 
-Icon usage was deliberately conservative: no new `Icons.Filled.*` symbol
-was introduced beyond `Icons.Filled.Close` (already proven to compile
-via `HomeScreen.kt` earlier in this same session). All new actions
-(add/delete/rename/switch) use text buttons instead of icons, to avoid
-any repeat of Session 22's "assumed an icon was available without
-checking the declared dependency" failure mode.
-## Session 23 — Build Failures & Fixes (SettingsScreen.kt)
+### What this does NOT yet do
 
-Three build attempts before a green result. Documented in full because
-the failure pattern — not just the final fix — is the actual lesson for
-future sessions.
-
-**Attempt 1 — paste truncation, not a code defect.** The full
-~450-line file was given as one code block. What actually landed on
-GitHub was 531 lines, cut off mid-identifier
-(`preferences.preferredContentLang` with no closing) partway through
-the final function. This produced misleading-looking compiler errors
-(`Unresolved reference 'settingsErrorMessage'`,
-`Unresolved reference 'ThemePreferencesSection'`) that look like
-missing-definition bugs but were actually "the definitions exist, they
-just never arrived on GitHub." Diagnosed by pulling the live file via
-`raw.githubusercontent.com` and reading the actual tail of the file
-directly — confirmed truncation, not a code issue, before proposing any
-fix. Dia confirmed the copy/paste consistently truncated at the same
-spot across multiple attempts, indicating a Spck clipboard length
-limit rather than a one-off mistake.
-
-**Fix for Attempt 1:** the file was split into two sequential paste
-chunks at a safe boundary (end of `PreferencesSection`, before the
-shared UI helper composables), each given as its own complete code
-block with explicit instructions on where the split was and that the
-first chunk intentionally has no closing brace. This landed completely
-(571 lines, verified) on the next push.
-
-**Attempt 2 — a real bug, not a paste issue.** With the file now
-complete, CI failed with
-`@Composable invocations can only happen from the context of a
-@Composable function` at the line calling `settingsErrorMessage(...)`
-from inside `LaunchedEffect { }`. Root cause: `settingsErrorMessage`
-was declared `@Composable` (because it internally calls
-`stringResource()`), but `LaunchedEffect`'s block is a suspend lambda,
-not composable context — you cannot call a `@Composable` function from
-inside it. **Fix:** stopped resolving the error to a `String` inside
-`LaunchedEffect`; instead store the raw `AppError` in state
-(`pendingError: AppError?` replacing the old `errorMessage: String?`)
-and only call `settingsErrorMessage()` at the point where it's
-actually rendered — inside `AlertDialog`'s `text = { ... }` lambda,
-which is valid composable context. This was given as three small,
-precisely-located find/replace edits rather than a full-file
-replacement, specifically to avoid re-triggering the Attempt 1
-clipboard issue on an already-large file.
-
-**Attempt 3 — one of the three edits didn't land.** CI still failed:
-`Unresolved reference 'pendingError'` at the exact lines that should
-have declared and used it. Pulled the live file and diffed line-by-line
-rather than guessing which edit was missing. Found: 2 of 3 edits had
-landed correctly; the state *declaration* line
-(`var errorMessage by remember { mutableStateOf<String?>(null) }`) had
-not been changed to `var pendingError by remember { mutableStateOf<AppError?>(null) }` —
-every other line already referenced the not-yet-declared `pendingError`.
-**Fix:** the single missing line, given precisely, no ambiguity. Landed
-and confirmed via CI on the next push.
-
-**Generalizable lessons from this sequence:**
-
-- When a paste consistently truncates at the same point across
-  multiple attempts, that's a length/buffer signal — switch to
-  sequential chunked pastes at a safe syntactic boundary rather than
-  retrying the same full-file paste again.
-- When CI reports "unresolved reference" for something that looks like
-  it should obviously be defined, check whether the file actually
-  landed completely on GitHub *before* assuming the code itself is
-  wrong — Attempt 1's errors were paste-truncation symptoms wearing a
-  missing-definition costume.
-- `@Composable` functions cannot be called from `LaunchedEffect`,
-  `rememberCoroutineScope().launch { }`, `viewModelScope`, or any other
-  suspend/coroutine context — only from other `@Composable` functions.
-  If a helper needs `stringResource()`, either call it from composable
-  context and pass the resolved `String` in, or (as done here) delay
-  resolution until the value is actually rendered.
-- For small, targeted fixes to an already-large file, giving 2–3
-  precise find/replace edits rather than a full-file re-paste both
-  avoids re-triggering clipboard truncation and makes it easier to spot
-  exactly which edit didn't land, if any didn't.
-- **Verify every single line of a multi-part edit landed** — don't
-  assume 3-for-3 just because CI ran again; 2 of 3 landing correctly
-  still produces a full build failure, and the fastest diagnosis is
-  pulling the live file and diffing against exactly what was given,
-  line by line if needed.
-
+Storing `durationMs` correctly does not by itself give completion
+percentage or automatic `markAsCompleted()` calling — see the new Known
+Limitations entry above. That remains open, not assumed solved. 
 ## Verification Method (standing practice, reconfirmed this session)
 
 `raw.githubusercontent.com` single-file pulls plus direct byte/line
 comparison against what was given, for every file, every push, no
-exceptions — this caught the Attempt 1 truncation immediately rather
-than after a confusing round of guessing at "code bugs" that didn't
-exist.
+exceptions. This session additionally cross-checked every
+`raw.githubusercontent.com` pull against a fresh full-repo tarball pull
+(`codeload.github.com`) to positively rule out CDN lag before treating
+any file as verified — both layers agreed on all 7 files, first try, no
+truncation or mismatch found this session.
 
-For CI status specifically: `api.github.com`'s unauthenticated rate
-limit was hit twice this session (shared IP pool in this environment) —
-when that happens, the fallback is asking Dia for the direct Actions
-run URL or job URL and fetching it via `web_fetch`, which worked
-reliably both times. When the API is reachable directly (confirmed
-working again by end of session), it's preferable since it doesn't
-depend on Dia copying a URL — checked via:
+For CI status: checked via
 
     curl -sL "https://api.github.com/repos/diaviloai/Onedebrid/actions/runs?per_page=3" \
       -H "Accept: application/vnd.github+json"
 
-Both methods are legitimate; try the API first, fall back to asking for
-the run URL if rate-limited. Either way, a run must show
-`"conclusion": "success"` (API) or "Status: Success" (web view) before
-any file or session is declared done — a "build clean" or "pushed"
-report from Dia is a trigger to go verify, not a substitute for
-verifying.
+which was reachable directly this session (no rate-limit fallback to
+Dia-supplied URLs needed). A run must show `"conclusion": "success"`
+(API) or "Status: Success" (web view) before any file or session is
+declared done — a "pushed" report from Dia is a trigger to go verify,
+not a substitute for verifying.
 
 ## Key Learnings & Principles (cumulative, all still in force)
 
 - **Read actual files before writing any code** — non-negotiable.
-  Sessions 14, 16, and 22 all had build failures traceable to writing
-  against assumed interfaces. Session 23's UUID-generation catch
-  (ProfileRepositoryImpl) is a case of this working correctly:
-  reading the actual repository implementation before writing the
-  screen caught a real bug before it was ever pasted.
+  Sessions 14, 16, 22, and 23 all had cases where this mattered
+  (failures avoided or bugs caught by doing it). Session 24's
+  seasonNumber/episodeNumber catch is another instance: reading
+  `PlaybackRepositoryImpl.saveProgress()` directly, rather than assuming
+  it was complete because it existed and looked plausible, surfaced a
+  real gap before any code was written against it.
 - **Grep build.gradle.kts / libs.versions.toml before importing
   anything from a library not yet used elsewhere in the codebase** —
   even common-seeming APIs may not have their artifact declared.
-  Session 23 applied this conservatively for Settings: rather than
-  research whether additional `Icons.Filled.*` symbols beyond `Close`
-  were safe, the screen simply avoided introducing any new icon
-  symbols at all, using text buttons instead.
 - **Don't declare a session or a file "done" without an actual CI
-  result** — checked via the GitHub Actions API or a direct run/job
-  URL fetch, not inferred from "build clean" or "pushed" alone. This
-  caught nothing new this session (Dia's reports were accurate every
-  time), but remains the standing verification step regardless.
-- **When a paste truncates at a consistent point across retries,
-  that's a signal to chunk the paste, not retry it unchanged.** New
-  lesson from Session 23 — see "Build Failures & Fixes" above for full
-  detail.
+  result** — checked via the GitHub Actions API or a direct run/job URL
+  fetch, not inferred from "build clean" or "pushed" alone.
+- **When a paste truncates at a consistent point across retries, that's
+  a signal to chunk the paste, not retry it unchanged.** (Session 23.)
+  Session 24 had no files large enough to risk this (largest was
+  `PlayerScreen.kt` at 302 lines, comfortably under the ~450-500 line
+  risk zone), but the threshold and mitigation remain in force for
+  future sessions.
 - **`@Composable` functions are only callable from other `@Composable`
   functions** — not from `LaunchedEffect`, coroutine scopes, or other
-  suspend contexts. New lesson from Session 23.
+  suspend contexts. (Session 23.)
 - **currentsprint.md on GitHub is the authoritative completion
   record** — project file copies are a convenience cache only.
 - **Flow collection:** always `flow.onEach{}.launchIn(viewModelScope)`,
@@ -382,53 +330,77 @@ verifying.
   Compose screens via `DisposableEffect(Unit).onDispose`, as
   PlayerScreen.kt does.
 - **ExoPlayer instance belongs in the Compose screen, not the
-  ViewModel.**
+  ViewModel.** Session 24 reaffirmed this: `durationMs`, like
+  `positionMs` before it, had to be threaded up from `PlayerScreen.kt`
+  through `PlayerViewModel` rather than looked up anywhere else,
+  because ExoPlayer is the only source of it and only the screen holds
+  the instance.
 - **Jetpack Navigation Compose cannot pass domain objects as nav
   args** — PendingPlaybackHolder singleton is the workaround; does not
   survive process death (documented in the file).
 - **MutableStateFlow.update{} does not resolve in this build
   environment** — use direct `_flow.value = _flow.value?.copy(...)`
   assignment instead.
+- **A synchronous snapshot read alongside an existing Flow-based
+  observe method is a reasonable, low-risk addition when a caller only
+  needs a one-off value** (`SessionRepository.getCurrentSession()`,
+  Session 24) — simpler than collecting `.first()` on a hot path like a
+  5-second ticker, and doesn't require changing the existing
+  `observeSession()` contract for other callers.
 - **CI/build environment:** GitHub Actions runners are fresh (no local
   build cache); `gradle-wrapper.jar` handled via
   `gradle/actions/setup-gradle@v3`.
 - **Verify pushed file contents directly, don't infer from build
   status** — re-pull and diff against GitHub before treating any edit
-  as landed.
+  as landed. Session 24 additionally cross-checked
+  `raw.githubusercontent.com` against a fresh tarball pull for the same
+  reason — belt and suspenders, cheap to do, catches CDN-lag false
+  negatives/positives.
 - **A use case/coordinator/repository chain returning a singular type
   where the domain clearly implies a collection is worth checking
   explicitly before building a screen against it** (Session 22
   SearchResult example).
+- **When a repository method's implementation silently drops fields
+  the entity/domain model actually has, that's worth fixing as part of
+  whatever adjacent work surfaced it, not just noting for later** —
+  Session 24's seasonNumber/episodeNumber fix was small, low-risk, and
+  directly adjacent to the work already being done, so it was resolved
+  immediately (with Dia's explicit sign-off) rather than deferred.
 
 ## Next Steps, In Order
 
-1. **Continue Watching persistence gap.** `SavePlaybackPositionUseCase`
-   currently only updates in-memory `SessionState`, not the Room-backed
-   `ContinueWatchingEntity` table. Not persisted end-to-end yet.
-2. **Media cache/lookup layer.** Not yet started. Would let the nav
-   graph pass a bare `mediaId` as a real nav arg instead of
-   `PendingPlaybackHolder`, fix the process-death gap, let SearchScreen
-   route TV_SHOW results to a real episode-picker instead of marking
-   them unsupported, and — newly relevant after Session 23 — let
-   HomeScreen's Continue Watching rows become tappable/resumable and
-   show real titles instead of raw `mediaId` strings.
-3. **Episode-picker screen / Details screen.** Not started. Needed to
+1. **Media cache/lookup layer.** Not yet started. Now the top
+   priority — would let the nav graph pass a bare `mediaId` as a real
+   nav arg instead of `PendingPlaybackHolder`, fix the process-death
+   gap, let SearchScreen route TV_SHOW results to a real episode-picker
+   instead of marking them unsupported, and let HomeScreen's Continue
+   Watching rows become tappable/resumable and show real titles instead
+   of raw `mediaId` strings. This is a substantial, foundational piece
+   of work — likely worth its own dedicated session(s) once started.
+2. **Episode-picker screen / Details screen.** Not started. Needed to
    lift SearchScreen's TV_SHOW limitation (Session 22) and would also
    give Continue Watching rows somewhere meaningful to navigate once
    the Media lookup layer exists.
-4. **Stream-candidate picker UI.** Not started. Needed to lift
+3. **Stream-candidate picker UI.** Not started. Needed to lift
    SearchScreen's Smart-Defaults-only limitation (Session 22).
-5. **`AppError.ValidationError` case.** Would let
+4. **`AppError.ValidationError` case.** Would let
    CreateProfileUseCase/UpdateProfileUseCase's blank-name validation
    and DeleteProfileUseCase's delete-active-profile rejection surface
    proper, distinct user-facing messages instead of both falling
    through SettingsScreen's generic `LocalStorageError` message. Low
    urgency (the UI already avoids the delete-active case proactively)
-   but worth doing whenever the broader error model gets a review
-   pass.
-6. **SettingsScreen preference-write debounce/Save-step reconsideration**
-   — only if it turns out to feel laggy on-device; not a confirmed
-   problem, just flagged for revisit (see Known Limitations above).
+   but worth doing whenever the broader error model gets a review pass.
+5. **Completion-percentage / markAsCompleted wiring.** Not started, new
+   as of Session 24. `durationMs` is now correctly persisted but
+   nothing calculates a completion percentage from it or calls
+   `PlaybackRepository.markAsCompleted()` automatically at a threshold
+   (~90%, per its doc comment). Worth scoping alongside or shortly
+   after the Media cache/lookup layer, since both touch Continue
+   Watching's read side.
+6. **SettingsScreen preference-write debounce/Save-step
+   reconsideration** — only if it turns out to feel laggy on-device;
+   not a confirmed problem, just flagged for revisit (see Known
+   Limitations above).
 
 ## Open TODOs (carried forward, unchanged unless noted)
 
@@ -438,9 +410,9 @@ verifying.
 - AppError has no ValidationError case; CreateProfileUseCase and
   UpdateProfileUseCase use LocalStorageError(IllegalArgumentException)
   for blank name validation — semantically incorrect; revisit when the
-  error model gets a review pass. **Now also affects
-  DeleteProfileUseCase's active-profile rejection, surfaced via
-  SettingsScreen — see Next Steps #5.**
+  error model gets a review pass. Also affects DeleteProfileUseCase's
+  active-profile rejection, surfaced via SettingsScreen — see Next
+  Steps #4.
 - StartPlaybackUseCase uses a fully qualified AppError reference inline;
   tidy to a top-level import if preferred
 - HomeViewModel.removeItem() has no failure feedback path —
@@ -457,17 +429,29 @@ verifying.
   tidy to top-level imports once confirmed safe.
 - SearchScreen's TV_SHOW tap-disabled state and Smart-Defaults-only
   playback are both deliberate, documented limitations, not bugs.
-- **NEW (Session 23):** `DropdownField<T>` in SettingsScreen.kt is a
-  simple `TextButton` + `DropdownMenu` implementation, not Material
-  3's `ExposedDropdownMenuBox`. Functional, but not the "official"
-  M3 dropdown pattern (which has its own anchor/positioning
-  requirements). Fine as-is; revisit only if visual polish on
+- `DropdownField<T>` in SettingsScreen.kt is a simple `TextButton` +
+  `DropdownMenu` implementation, not Material 3's
+  `ExposedDropdownMenuBox`. Functional, but not the "official" M3
+  dropdown pattern. Fine as-is; revisit only if visual polish on
   Settings becomes a priority.
-- **NEW (Session 23):** No language list/picker exists — subtitle,
-  audio, and content-language preferences are all free-text BCP-47
-  code entry fields with a hint string, not validated or
-  autocompleted. Revisit if a proper language picker becomes worth
-  building.
+- No language list/picker exists — subtitle, audio, and
+  content-language preferences are all free-text BCP-47 code entry
+  fields with a hint string, not validated or autocompleted. Revisit
+  if a proper language picker becomes worth building.
+- **NEW (Session 24):** `PlaybackRepositoryImpl`'s `markAsCompleted()`
+  block (lines ~76-85 as of this session) has inconsistent
+  indentation relative to the rest of the file — pre-existing, not
+  touched this session to avoid an unrelated risky diff on a file
+  already being edited for the saveProgress() change. Cosmetic only;
+  clean up whenever that method is next touched for functional
+  reasons.
+- **NEW (Session 24):** `ExoPlayer.duration` can report `C.TIME_UNSET`
+  before a stream has buffered enough to know its length. This is
+  currently stored as-is in `ContinueWatchingEntity.durationMs`
+  without correction (see `PlayerViewModel.onPlayerStateChanged`'s doc
+  comment). Not a problem today since nothing reads durationMs for a
+  calculation yet, but will need explicit handling once Next Steps #5
+  (completion-percentage wiring) is scoped.
 
 At the end of the next session, update currentsprint.md (full file, in
 a code block) and verify it directly against
