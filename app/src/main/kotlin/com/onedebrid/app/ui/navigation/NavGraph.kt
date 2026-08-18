@@ -35,19 +35,23 @@ sealed class Route(val path: String) {
 /**
  * The app's single NavHost.
  *
- * Home is wired to the real HomeScreen composable. HomeScreen's own doc
- * comment covers its one deliberate limitation: Continue Watching rows are
- * not yet tappable to resume playback, since WatchedItem carries no full
- * Media object and no Media lookup layer exists yet (currentsprint.md Next
- * Steps item 5).
+ * Home is wired to the real HomeScreen composable. As of Session 25,
+ * Continue Watching rows are tappable to resume playback via the Media
+ * cache/lookup layer (MediaCache + GetMediaByIdUseCase) — see
+ * HomeScreen.kt's own doc comment for the resolve flow and its one
+ * remaining deliberate limitation (resolution can fail today since
+ * MetadataProvider is still a stub).
  *
  * Player is wired for real. It reads its PlaybackRequest from
  * PendingPlaybackHolder rather than from nav arguments — see that file's
- * doc comment for why (nav args can't carry a full PlaybackRequest, and no
- * Media lookup layer exists yet to resolve one from a bare mediaId).
- * onMissingRequest routes back to Home, since a Player entry with nothing
- * pending (e.g. restored back stack after process death, per
- * PendingPlaybackHolder's documented limitation) has nothing to show.
+ * doc comment for why (nav args still can't carry a full PlaybackRequest;
+ * the Media lookup layer added Session 25 closes the original blocker
+ * for HomeScreen's tap-to-resume specifically, but PendingPlaybackHolder
+ * itself has not been replaced — see its doc comment for what would still
+ * be needed to do that, e.g. process-death survival). onMissingRequest
+ * routes back to Home, since a Player entry with nothing pending (e.g.
+ * restored back stack after process death, per PendingPlaybackHolder's
+ * documented limitation) has nothing to show.
  *
  * Search is wired for real. Navigating to it from Home is a plain forward
  * navigate() with no popUpTo — Search sits on top of Home on the back
@@ -83,6 +87,15 @@ fun NavGraph(
                 },
                 onNavigateToSettings = {
                     navController.navigate(Route.Settings.path)
+                },
+                onNavigateToPlayer = {
+                    // Same plain forward navigate() SearchScreen already
+                    // uses to reach Player (Session 25) — HomeViewModel
+                    // has already populated PendingPlaybackHolder by the
+                    // time this fires, since the navigation event is only
+                    // emitted after a successful resolve+set() (see
+                    // HomeViewModel.onItemClick).
+                    navController.navigate(Route.Player.path)
                 }
             )
         }

@@ -30,6 +30,8 @@
     <string name="home_continue_watching_empty">Nothing to continue watching yet</string>
     <string name="home_remove_item">Remove from Continue Watching</string>
     <string name="home_continue_watching_progress">%1$d%% watched</string>
+    <string name="home_resolving_media">Loading…</string>
+    <string name="home_resume_error">Couldn\'t load this title. Tap to retry.</string>
 
     <!-- Settings / Profile screen -->
     <string name="settings_title">Settings</string>

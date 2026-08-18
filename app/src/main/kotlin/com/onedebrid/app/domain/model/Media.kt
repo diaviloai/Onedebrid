@@ -1,6 +1,9 @@
 package com.onedebrid.app.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
+
  * The canonical representation of playable content within OneDebrid.
  *
  * Media is the shared language between all subsystems. Search results reference it,
@@ -30,6 +33,7 @@ data class Media(
  * TV_SHOW content has seasons and episodes. MOVIE content does not.
  * Systems that behave differently for each type switch on this value.
  */
+@Serializable
 enum class MediaType {
     MOVIE,
     TV_SHOW

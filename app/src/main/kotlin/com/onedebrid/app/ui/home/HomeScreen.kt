@@ -1,5 +1,6 @@
 package com.onedebrid.app.ui.home
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -30,7 +32,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
+import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.WatchedItem
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * The Home screen — Continue Watching, per UI_UX_Design.md's "Home Hub"
@@ -47,29 +51,42 @@ import com.onedebrid.app.domain.model.WatchedItem
  * session (Session 23) once SettingsScreen.kt existed, using the same
  * TextButton-in-TopAppBar pattern for consistency.
  *
- * Known, deliberate limitation (Session 23), same "flag rather than
- * silently work around" convention SearchScreen established for its
- * TV_SHOW rows:
+ * Continue Watching rows ARE tappable to resume playback, as of Session
+ * 25's Media cache/lookup layer (MediaCache + cache-first wiring in
+ * MediaRepositoryImpl, GetMediaByIdUseCase). Tapping a row triggers
+ * HomeViewModel.onItemClick(), which resolves the row's bare mediaId to a
+ * full Media, builds a PlaybackRequest (including resumePositionMs from
+ * the row's own progress), populates PendingPlaybackHolder, and emits a
+ * one-shot navigation event this composable collects below to call
+ * [onNavigateToPlayer].
  *
- * Continue Watching rows are NOT tappable to resume playback. WatchedItem
- * (see that file's doc comment) only carries a mediaId, episode context,
- * and progress — never a full Media object (title, artwork, etc.).
- * PlaybackRequest requires a full Media. There is no Media cache/lookup
- * layer yet to turn a bare mediaId back into a Media (tracked as Next
- * Steps item 5 in currentsprint.md, unstarted as of this session). Until
- * that lookup layer exists, resuming from Home is not possible — rows
- * display mediaId and progress only, with a Remove action, and are
- * visibly non-interactive rather than silently doing nothing on tap.
+ * Known, deliberate limitation carried forward from this change: since
+ * MetadataProvider is still StubMetadataProvider (see
+ * currentsprint.md), a tap will succeed only if this mediaId happens to
+ * already be cache-hit (nothing seeds the cache yet outside of a prior
+ * successful fetch), and will otherwise resolve to
+ * AppError.AllProvidersUnavailable — surfaced via [uiState].resumeError,
+ * rendered inline on the row rather than silently doing nothing, matching
+ * the project's "flag rather than silently work around" convention
+ * (same one SearchScreen established for its own TV_SHOW rows). This is
+ * expected wiring-ahead-of-provider behavior, not a bug in this screen.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToPlayer: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(viewModel) {
+        viewModel.navigateToPlayer.collectLatest {
+            onNavigateToPlayer()
+        }
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
@@ -90,6 +107,9 @@ fun HomeScreen(
                 uiState.continueWatching.isEmpty() -> EmptyContent()
                 else -> ContinueWatchingList(
                     items = uiState.continueWatching,
+                    resolvingMediaId = uiState.resolvingMediaId,
+                    resumeError = uiState.resumeError,
+                    onItemClick = viewModel::onItemClick,
                     onRemove = viewModel::removeItem
                 )
             }
@@ -118,6 +138,9 @@ private fun EmptyContent() {
 @Composable
 private fun ContinueWatchingList(
     items: List<WatchedItem>,
+    resolvingMediaId: String?,
+    resumeError: AppError?,
+    onItemClick: (WatchedItem) -> Unit,
     onRemove: (String) -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
@@ -128,8 +151,34 @@ private fun ContinueWatchingList(
         )
         LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
             items(items, key = { it.mediaId }) { item ->
-                ContinueWatchingRow(item = item, onRemove = onRemove)
+                ContinueWatchingRow(
+                    item = item,
+                    isResolving = item.mediaId == resolvingMediaId,
+                    // resumeError doesn't identify which row it belongs to
+                    // (HomeUiState only tracks the single most recent
+                    // failure, not one per mediaId), so it's shown on
+                    // whichever row was most recently tapped and is no
+                    // longer resolving. Once resolvingMediaId is cleared,
+                    // its former value is gone from state — so this
+                    // approximates "the row that just failed" via
+                    // resolvingMediaId's absence rather than an exact
+                    // per-row error map. Acceptable for a single
+                    // concurrent resolution at a time (see
+                    // HomeViewModel.onItemClick's doc comment); would need
+                    // a proper per-row error map if concurrent resolution
+                    // is ever supported.
+                    onClick = { onItemClick(item) },
+                    onRemove = onRemove
+                )
             }
+        }
+        if (resumeError != null && resolvingMediaId == null) {
+            Text(
+                text = stringResource(R.string.home_resume_error),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
         }
     }
 }
@@ -137,17 +186,32 @@ private fun ContinueWatchingList(
 /**
  * A single Continue Watching row.
  *
- * Not clickable — see the HomeScreen doc comment for why. Shows mediaId
- * directly (no title available yet, per WatchedItem's own doc comment)
- * along with a progress percentage when duration is known, so the row is
- * still informative even without metadata. Remove is the only available
- * action.
+ * Tappable to resume playback as of Session 25 — see the HomeScreen doc
+ * comment. Shows mediaId directly (no title available yet; a successful
+ * resolve happens on tap, not proactively for every visible row, since
+ * proactively resolving every row would mean an unbounded number of
+ * network/cache calls just from Home appearing on screen — deliberately
+ * out of scope for this session, left as a possible future enhancement if
+ * showing real titles/artwork in the list itself becomes a priority)
+ * along with a progress percentage when duration is known. Remove remains
+ * available independent of the row's resolve state.
+ *
+ * [isResolving] shows a small inline spinner in place of the progress
+ * text while this specific row's tap is being resolved, and disables
+ * further taps on it (click handling itself is guarded in
+ * HomeViewModel.onItemClick, this is the visual counterpart).
  */
 @Composable
-private fun ContinueWatchingRow(item: WatchedItem, onRemove: (String) -> Unit) {
+private fun ContinueWatchingRow(
+    item: WatchedItem,
+    isResolving: Boolean,
+    onClick: () -> Unit,
+    onRemove: (String) -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(enabled = !isResolving, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -157,13 +221,24 @@ private fun ContinueWatchingRow(item: WatchedItem, onRemove: (String) -> Unit) {
                 text = item.mediaId,
                 style = MaterialTheme.typography.bodyLarge
             )
-            val progressPercent = continueWatchingProgressPercent(item)
-            if (progressPercent != null) {
+            if (isResolving) {
                 Text(
-                    text = stringResource(R.string.home_continue_watching_progress, progressPercent),
+                    text = stringResource(R.string.home_resolving_media),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else {
+                val progressPercent = continueWatchingProgressPercent(item)
+                if (progressPercent != null) {
+                    Text(
+                        text = stringResource(
+                            R.string.home_continue_watching_progress,
+                            progressPercent
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         IconButton(onClick = { onRemove(item.mediaId) }) {

@@ -1,6 +1,9 @@
 package com.onedebrid.app.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
+
  * Represents a single episode of a TV show.
  *
  * Episode always belongs to a parent Media of type TV_SHOW. It carries enough
@@ -11,6 +14,7 @@ package com.onedebrid.app.domain.model
  * An Episode can be created from minimal information and enriched later by the
  * Metadata system.
  */
+@Serializable
 data class Episode(
     val id: String,
     val mediaId: String,

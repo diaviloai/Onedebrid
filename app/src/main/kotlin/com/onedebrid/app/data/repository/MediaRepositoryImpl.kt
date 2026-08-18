@@ -1,5 +1,6 @@
 package com.onedebrid.app.data.repository
 
+import com.onedebrid.app.data.local.MediaCache
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.error.ProviderError
@@ -28,23 +29,53 @@ class MediaRepositoryImpl @Inject constructor(
     private val metadataProvider: MetadataProvider,
     private val debridProvider: DebridProvider,
     private val searchProvider: SearchProvider,
+    private val mediaCache: MediaCache,
     private val dispatchers: CoroutineDispatchers
 ) : MediaRepository {
 
+    /**
+     * Cache-first (Session 25). Checks MediaCache before hitting the
+     * network; writes through to MediaCache on a successful fetch. A cache
+     * hit skips metadataProvider entirely, so this also works while
+     * MetadataProvider is still StubMetadataProvider — as long as a Media
+     * for this mediaId was cached previously (e.g. by a future real
+     * provider, or a test seeding the cache directly), getMediaDetails()
+     * will succeed without needing a real network call. On a cache miss
+     * today, this still resolves to AppError.AllProvidersUnavailable via
+     * the stub, exactly as before this change — the cache does not alter
+     * failure behavior, only skips redundant work on a hit.
+     */
     override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
         withContext(dispatchers.io) {
+            mediaCache.getMedia(mediaId)?.let { cached ->
+                return@withContext RepositoryResult.Success(cached)
+            }
             metadataProvider.fetchMediaDetails(
                 externalId = mediaId,
                 idType = ExternalIdType.IMDB
-            ).toRepositoryResult()
+            ).toRepositoryResult().also { result ->
+                if (result is RepositoryResult.Success) {
+                    mediaCache.putMedia(result.data)
+                }
+            }
         }
 
+    /**
+     * Cache-first, same pattern as getMediaDetails() above.
+     */
     override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> =
         withContext(dispatchers.io) {
+            mediaCache.getEpisodes(mediaId)?.let { cached ->
+                return@withContext RepositoryResult.Success(cached)
+            }
             metadataProvider.fetchEpisodes(
                 externalId = mediaId,
                 idType = ExternalIdType.IMDB
-            ).toRepositoryResult()
+            ).toRepositoryResult().also { result ->
+                if (result is RepositoryResult.Success) {
+                    mediaCache.putEpisodes(mediaId, result.data)
+                }
+            }
         }
 
     override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
