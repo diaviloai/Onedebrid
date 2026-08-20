@@ -38,42 +38,37 @@ import com.onedebrid.app.coordinator.SearchState
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
-import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.SearchResult
-import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
 
 /**
  * The Search screen.
  *
- * The first real screen (besides Player) with a full Media object in hand
- * at the moment the user acts on it — see currentsprint.md Session 21 "Next
- * Steps" for why Search rather than Home was chosen as the first real
- * PendingPlaybackHolder.set() caller. Home's Continue Watching only holds
- * WatchedItem (mediaId only, no full Media), so it can't build a
- * PlaybackRequest without a Media lookup layer that doesn't exist yet.
- * Search's results carry a full Media inside each SearchResult, so no such
- * lookup is needed here.
+ * As of Session 26, tapping ANY result (movie or TV show) navigates to
+ * Details via [onNavigateToDetails], passing only the result's mediaId —
+ * this screen no longer builds a PlaybackRequest or touches
+ * PendingPlaybackHolder itself. DetailsViewModel re-fetches the full Media
+ * via GetMediaByIdUseCase and, for TV shows, the episode list via
+ * GetEpisodesUseCase, then handles the PendingPlaybackHolder handoff to
+ * Player from there. See DetailsScreen.kt/DetailsViewModel.kt for that
+ * flow and NavGraph.kt for the route wiring.
  *
- * Two known, deliberate limitations in this first version — both flagged
- * rather than silently worked around:
+ * This closes the "TV_SHOW not yet playable" gap this screen had prior to
+ * Session 26 (PlaybackRequest requires an Episode for TV_SHOW content,
+ * SearchResult/Media carried no episode data, and no episode-picker screen
+ * existed yet) by giving every result type a real destination instead of
+ * disabling half of them.
  *
- * 1. Only MediaType.MOVIE results are tappable. PlaybackRequest requires an
- *    Episode for TV_SHOW content, but SearchResult/Media carry no episode
- *    data, and no episode-picker screen exists yet. TV_SHOW results are
- *    rendered but visibly non-interactive (see SearchResultRow) rather than
- *    silently doing nothing on tap, so this isn't mistaken for a bug.
- * 2. Playback always uses Smart Defaults (preferredSource = null in the
- *    built PlaybackRequest). There is no stream-candidate picker UI yet for
- *    a user to manually override the pick, so manual selection is not yet
- *    reachable from this screen. This matches Project_Design.md's Smart
- *    Defaults principle as the correct default behavior, not just a
- *    shortcut taken to avoid building the picker.
+ * One remaining known, deliberate limitation, unchanged from before: manual
+ * stream-source selection isn't reachable from anywhere yet (Details' play
+ * actions, like this screen's old direct-to-Player flow, always build
+ * PlaybackRequest with preferredSource = null, i.e. Smart Defaults). This
+ * matches Project_Design.md's Smart Defaults principle as the correct
+ * default behavior, not just a shortcut taken to avoid building a picker.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    pendingPlaybackHolder: PendingPlaybackHolder,
-    onNavigateToPlayer: () -> Unit,
+    onNavigateToDetails: (mediaId: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
@@ -115,14 +110,7 @@ fun SearchScreen(
                 is SearchState.Results -> ResultsContent(
                     results = searchState.results,
                     onResultClick = { searchResult ->
-                        val profileId = uiState.activeProfileId ?: return@ResultsContent
-                        val request = PlaybackRequest(
-                            media = searchResult.media,
-                            episode = null,
-                            preferredSource = null
-                        )
-                        pendingPlaybackHolder.set(request, profileId)
-                        onNavigateToPlayer()
+                        onNavigateToDetails(searchResult.media.id)
                     }
                 )
 
@@ -226,21 +214,20 @@ private fun ResultsContent(
 /**
  * A single search result row.
  *
- * TV_SHOW results are rendered but not clickable — see the SearchScreen doc
- * comment for why. A trailing label makes this state visible rather than
- * the row silently doing nothing on tap.
+ * As of Session 26, every result is tappable — MOVIE and TV_SHOW alike —
+ * since both now have a real destination (Details). Prior to this session,
+ * TV_SHOW rows were rendered non-interactive with a "Not yet supported"
+ * label; that label and the isPlayable split are gone now that the
+ * limitation they existed to flag no longer applies.
  */
 @Composable
 private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Unit) {
     val media: Media = result.media
-    val isPlayable = media.type == MediaType.MOVIE
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (isPlayable) Modifier.clickable { onClick(result) } else Modifier
-            )
+            .clickable { onClick(result) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -264,13 +251,6 @@ private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Uni
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-        if (!isPlayable) {
-            Text(
-                text = stringResource(R.string.search_tv_show_unsupported),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

@@ -3,9 +3,12 @@ package com.onedebrid.app.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.onedebrid.app.ui.details.DetailsScreen
 import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
@@ -30,6 +33,20 @@ sealed class Route(val path: String) {
     data object Player : Route("player")
     data object Search : Route("search")
     data object Settings : Route("settings")
+
+    /**
+     * Details takes a mediaId nav argument (Session 26) — the first route
+     * in this graph to carry one. path is the pattern registered with
+     * NavHost ("details/{mediaId}"); [build] produces the concrete route
+     * string a caller navigates to for a specific mediaId. A plain string
+     * argument, not a full Media, for the same reason documented
+     * throughout this file and PendingPlaybackHolder.kt: nav args can't
+     * carry domain objects, so DetailsViewModel re-fetches the full Media
+     * itself via GetMediaByIdUseCase — see its own doc comment.
+     */
+    data object Details : Route("details/{mediaId}") {
+        fun build(mediaId: String): String = "details/$mediaId"
+    }
 }
 
 /**
@@ -56,11 +73,13 @@ sealed class Route(val path: String) {
  * Search is wired for real. Navigating to it from Home is a plain forward
  * navigate() with no popUpTo — Search sits on top of Home on the back
  * stack, so a back-press from Search returns to Home normally, matching
- * the flat navigation structure described in UI_UX_Design.md. SearchScreen
- * forwards to Player the same way any future caller will: by populating
- * PendingPlaybackHolder and then navigating to Route.Player.path — see
- * SearchScreen.kt's own doc comment for its two deliberate limitations
- * (TV_SHOW results not yet playable, no manual stream-source picker yet).
+ * the flat navigation structure described in UI_UX_Design.md. As of
+ * Session 26, tapping ANY search result (movie or TV show) navigates to
+ * Details rather than SearchScreen populating PendingPlaybackHolder
+ * itself — this closed the "TV_SHOW not yet playable" gap from Session 25
+ * by giving TV shows a real destination (an episode picker) instead of
+ * disabling them. See SearchScreen.kt's own doc comment for its one
+ * remaining deliberate limitation (no manual stream-source picker yet).
  *
  * Settings is wired for real (Session 23), reached the same way as
  * Search — a plain forward navigate() from Home with no popUpTo, so
@@ -68,6 +87,17 @@ sealed class Route(val path: String) {
  * PendingPlaybackHolder or navigation callbacks of its own; it is a leaf
  * destination in this graph (no further forward navigation happens from
  * it yet).
+ *
+ * Details is wired for real (Session 26), reached only from Search today.
+ * Takes a mediaId nav argument (Route.Details.build()) — the first route
+ * in this graph to carry an argument. Renders movie details with a Play
+ * action, or a TV show's episode list. Both actions populate
+ * PendingPlaybackHolder and navigate to Player the same way Search used
+ * to directly — see DetailsScreen.kt/DetailsViewModel.kt's own doc
+ * comments, including why Continue Watching's tap-to-resume flow is
+ * deliberately NOT routed through here (resume-position preservation).
+ * Back-press returns to Search normally (popBackStack(), no special
+ * popUpTo needed since Details never becomes a start destination).
  */
 @Composable
 fun NavGraph(
@@ -120,15 +150,28 @@ fun NavGraph(
 
         composable(Route.Search.path) {
             SearchScreen(
-                pendingPlaybackHolder = pendingPlaybackHolder,
-                onNavigateToPlayer = {
-                    navController.navigate(Route.Player.path)
+                onNavigateToDetails = { mediaId ->
+                    navController.navigate(Route.Details.build(mediaId))
                 }
             )
         }
 
         composable(Route.Settings.path) {
             SettingsScreen()
+        }
+
+        composable(
+            route = Route.Details.path,
+            arguments = listOf(navArgument("mediaId") { type = NavType.StringType })
+        ) {
+            DetailsScreen(
+                onNavigateToPlayer = {
+                    navController.navigate(Route.Player.path)
+                },
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }

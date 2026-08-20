@@ -19,7 +19,7 @@
     <string name="search_history_clear">Clear</string>
     <string name="search_no_results">No results found</string>
     <string name="search_tv_show_label">TV Show</string>
-    <string name="search_tv_show_unsupported">Not yet supported</string>
+    <string name="search_tv_show_unsupported">Not yet supported</string> <!-- unused as of Session 26, see currentsprint.md Open TODOs -->
     <string name="search_error_providers_unavailable">All search providers are unavailable right now. Please try again shortly.</string>
 
     <!-- Home screen -->
@@ -32,6 +32,13 @@
     <string name="home_continue_watching_progress">%1$d%% watched</string>
     <string name="home_resolving_media">Loading…</string>
     <string name="home_resume_error">Couldn\'t load this title. Tap to retry.</string>
+
+    <!-- Details screen -->
+    <string name="details_back">Back</string>
+    <string name="details_play">Play</string>
+    <string name="details_no_episodes">No episodes found</string>
+    <string name="details_season_header">Season %1$d</string>
+    <string name="details_episode_fallback_title">Episode %1$d</string>
 
     <!-- Settings / Profile screen -->
     <string name="settings_title">Settings</string>

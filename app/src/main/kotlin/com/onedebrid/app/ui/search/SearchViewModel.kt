@@ -50,12 +50,13 @@ class SearchViewModel @Inject constructor(
         getActiveProfileUseCase()
             .onEach { profile ->
                 _activeProfile.value = profile
-                // Mirror the active profile's id into UiState. The screen
-                // needs this to hand off to PendingPlaybackHolder.set() when
-                // the user taps a result — it has no other way to reach the
-                // active profile id, since _activeProfile itself is private
-                // and exists here only for this ViewModel's own synchronous
-                // reads inside search()/clearHistory().
+                // Mirror the active profile's id into UiState. As of
+                // Session 26 this is no longer read by SearchScreen itself
+                // (PendingPlaybackHolder handoff moved to DetailsViewModel
+                // once tapping a result navigates to Details instead of
+                // playing directly) — left in place per Dia's Session 26
+                // call rather than removed, flagged in currentsprint.md's
+                // Open TODOs to revisit near project end if still unused.
                 _uiState.value = _uiState.value.copy(activeProfileId = profile.id)
                 // When the profile changes, start observing its history.
                 // History observation is started here rather than once at init
@@ -131,9 +132,9 @@ class SearchViewModel @Inject constructor(
  * searchState: Current execution state (idle / searching / results / error).
  * searchHistory: Past queries for the active profile, shown when idle.
  * activeProfileId: The currently active profile's id, or null if no profile
- * is active yet. Exposed so SearchScreen can pass it to
- * PendingPlaybackHolder.set() when the user taps a result to play it —
- * SearchScreen has no other route to the active profile id.
+ * is active yet. Unused by SearchScreen as of Session 26 (see the init{}
+ * block's comment) — left in place, flagged in currentsprint.md to revisit
+ * near project end if still unused.
  */
 data class SearchUiState(
     val searchState: SearchState = SearchState.Idle,
