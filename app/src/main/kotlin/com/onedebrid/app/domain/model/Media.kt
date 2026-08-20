@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
  * can be created from minimal search result information and enriched later by the
  * Metadata system. This ensures metadata loading never blocks playback.
  */
+@Serializable
 data class Media(
     val id: String,
     val title: String,
