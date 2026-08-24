@@ -530,6 +530,21 @@ worked around)
 - **NEW (Session 27):** `getEpisodeById()`'s not-found path reuses
   `AppError.Unknown` — not semantically ideal (see Next Steps #4), but
   consistent with `Unknown` already being this codebase's catch-all.
-- **CARRIED (Session 26):** `SearchUiState.activeProfileId` is dead
+**CARRIED (Session 26):** `SearchUiState.activeProfileId` is dead
   state. Left in place per Dia's explicit call; revisit near project end
-  if still un
+  if still unused.
+- **CARRIED (Session 26):** `search_tv_show_unsupported` string resource
+  is unused. Left in place with an inline XML comment flagging it.
+- **CARRIED (Session 26):** `Media.id` for a `SearchResult` tapped in
+  Search vs. the `Media` re-fetched by `DetailsViewModel`/`PlayerViewModel`
+  via `GetMediaByIdUseCase` are assumed to always round-trip cleanly as a
+  String `mediaId`. Not covered by an automated test (none exist in this
+  repo yet).
+
+At the end of the next session, update currentsprint.md (full file, in
+a code block, chunked into sequential pastes if it's likely to exceed
+~450-500 lines) and verify it directly against
+raw.githubusercontent.com/diaviloai/Onedebrid/main/currentsprint.md
+before treating the session as closed — and do not treat any session as
+closed without an actual green CI result for whatever was last pushed,
+verified via the direct run/job URL if the Actions API is rate-limited.
