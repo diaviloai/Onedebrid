@@ -2,16 +2,11 @@ package com.onedebrid.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
-import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
-import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
+import com.onedebrid.app.ui.navigation.PlayerNavArgs
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetContinueWatchingUseCase
-import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RemoveFromContinueWatchingUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -34,49 +29,41 @@ import javax.inject.Inject
  * loading state. [isLoading] only reflects the brief window before the
  * first emission from Continue Watching arrives for the active profile.
  *
- * [resolvingMediaId] (Session 25) is the mediaId currently being resolved
- * to a full Media for tap-to-resume, or null if no row is resolving. Only
- * one row can resolve at a time — a second tap while one is in flight is
- * ignored (see onItemClick) rather than queued, since starting a second
- * concurrent resolution has no clear UX benefit and complicates state.
- *
- * [resumeError] (Session 25) is the AppError from the most recent failed
- * resolution, or null. Cleared on the next tap attempt. Expected to be
- * AppError.AllProvidersUnavailable in practice today, since
- * MetadataProvider is still StubMetadataProvider — see GetMediaByIdUseCase
- * and MediaRepositoryImpl's doc comments. This is surfaced visibly (see
- * HomeScreen) rather than silently swallowed, matching the project's
- * "flag rather than silently work around" convention.
+ * Session 27: resolvingMediaId and resumeError (Session 25) have been
+ * removed. Tapping a Continue Watching row used to resolve a full Media
+ * here before navigating (so a resolution failure could be shown inline on
+ * the row without leaving Home) — as of Session 27, onItemClick() navigates
+ * immediately via nav args, and PlayerViewModel resolves Media itself once
+ * the Player screen is reached. Any resolution failure now surfaces there
+ * instead, using PlayerScreen's existing error card + retry, rather than
+ * inline on this screen. This was a deliberate, discussed tradeoff (see
+ * currentsprint.md Session 27 notes), not an oversight — tapping a row now
+ * always navigates instantly, and a failed resolution requires a back-press
+ * to return to Home rather than staying on Home the whole time.
  */
 data class HomeUiState(
     val continueWatching: List<WatchedItem> = emptyList(),
-    val isLoading: Boolean = true,
-    val resolvingMediaId: String? = null,
-    val resumeError: AppError? = null
+    val isLoading: Boolean = true
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val getActiveProfileUseCase: GetActiveProfileUseCase,
     private val getContinueWatchingUseCase: GetContinueWatchingUseCase,
-    private val removeFromContinueWatchingUseCase: RemoveFromContinueWatchingUseCase,
-    private val getMediaByIdUseCase: GetMediaByIdUseCase,
-    private val pendingPlaybackHolder: PendingPlaybackHolder
+    private val removeFromContinueWatchingUseCase: RemoveFromContinueWatchingUseCase
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
-    // One-shot navigation event (Session 25) — this screen is the first to
-    // need async work (a suspend Media lookup) between a user tap and
-    // navigation, unlike SearchScreen where the full Media is already in
-    // hand synchronously at tap time (see SearchScreen.kt's doc comment).
-    // A Channel is used rather than a second StateFlow so the navigation
-    // event fires exactly once and is never accidentally replayed on
-    // recomposition or configuration change, which a StateFlow's
-    // conflated-replay-of-1 semantics would risk.
-    private val _navigateToPlayer = Channel<Unit>(Channel.BUFFERED)
-    val navigateToPlayer: Flow<Unit> = _navigateToPlayer.receiveAsFlow()
+    // One-shot navigation event carrying the nav args Route.Player.build()
+    // needs (Session 27 — previously Channel<Unit>, since PendingPlaybackHolder
+    // carried the actual payload out of band). A Channel rather than a
+    // second StateFlow so the navigation event fires exactly once and is
+    // never accidentally replayed on recomposition or configuration change,
+    // which a StateFlow's conflated-replay-of-1 semantics would risk.
+    private val _navigateToPlayer = Channel<PlayerNavArgs>(Channel.BUFFERED)
+    val navigateToPlayer: Flow<PlayerNavArgs> = _navigateToPlayer.receiveAsFlow()
 
     // Mirrors SearchViewModel's pattern: the active profile is tracked
     // privately so removeItem() can read profileId synchronously without
@@ -129,70 +116,30 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Resolve a Continue Watching row to a full Media and, on success,
-     * populate PendingPlaybackHolder and emit a navigation event for
-     * HomeScreen/NavGraph to act on (Session 25).
+     * Emit a navigation event for a Continue Watching row tap, carrying
+     * exactly the nav args Route.Player.build() needs.
      *
-     * No-op if no profile is active yet, or if a resolution is already in
-     * flight (see resolvingMediaId doc comment above) — a second tap on
-     * the same or a different row while one is resolving is ignored rather
-     * than queued or cancelling the first.
+     * Session 27: previously resolved a full Media here via
+     * GetMediaByIdUseCase before navigating (see this class's old
+     * resolvingMediaId/resumeError state, now removed). No longer does —
+     * this method only reads fields already present on WatchedItem and
+     * emits immediately; PlayerViewModel resolves Media/Episode itself
+     * from the mediaId/episodeId nav args once Player is reached. This
+     * also means HomeViewModel no longer needs GetMediaByIdUseCase or
+     * PendingPlaybackHolder at all.
      *
-     * Builds episode/resumePositionMs directly from the WatchedItem's own
-     * fields rather than re-deriving them, since WatchedItem already
-     * carries exactly this context (see its doc comment). For a TV
-     * episode, only seasonNumber/episodeNumber/episodeId are known here —
-     * not a full Episode object (title, overview, etc.), since WatchedItem
-     * doesn't carry one. PlaybackRequest.episode is therefore built as a
-     * minimal Episode using just those three fields; PlayerScreen/
-     * PlayerViewModel already tolerate an Episode with only its required
-     * fields populated (seasonNumber/episodeNumber/id/mediaId), same as
-     * any other partially-enriched Episode per that model's own doc
-     * comment ("can be created from minimal information").
+     * No-op if no profile is active yet. Unlike the old version, there is
+     * no "resolution already in flight" guard needed anymore — navigation
+     * is now synchronous and instant, so there's nothing to race.
      */
     fun onItemClick(item: WatchedItem) {
-        val profileId = _activeProfile.value?.id ?: return
-        if (_uiState.value.resolvingMediaId != null) return
-
-        _uiState.value = _uiState.value.copy(
-            resolvingMediaId = item.mediaId,
-            resumeError = null
+        _activeProfile.value ?: return
+        _navigateToPlayer.trySend(
+            PlayerNavArgs(
+                mediaId = item.mediaId,
+                episodeId = item.episodeId,
+                resumeMs = item.positionMs
+            )
         )
-
-        viewModelScope.launch {
-            when (val result = getMediaByIdUseCase(item.mediaId)) {
-                is RepositoryResult.Success -> {
-                    val episode = if (item.episodeId != null &&
-                        item.seasonNumber != null &&
-                        item.episodeNumber != null
-                    ) {
-                        Episode(
-                            id = item.episodeId,
-                            mediaId = item.mediaId,
-                            seasonNumber = item.seasonNumber,
-                            episodeNumber = item.episodeNumber
-                        )
-                    } else {
-                        null
-                    }
-                    val request = PlaybackRequest(
-                        media = result.data,
-                        episode = episode,
-                        preferredSource = null,
-                        resumePositionMs = item.positionMs
-                    )
-                    pendingPlaybackHolder.set(request, profileId)
-                    _uiState.value = _uiState.value.copy(resolvingMediaId = null)
-                    _navigateToPlayer.trySend(Unit)
-                }
-
-                is RepositoryResult.Failure -> {
-                    _uiState.value = _uiState.value.copy(
-                        resolvingMediaId = null,
-                        resumeError = result.error
-                    )
-                }
-            }
-        }
     }
 }

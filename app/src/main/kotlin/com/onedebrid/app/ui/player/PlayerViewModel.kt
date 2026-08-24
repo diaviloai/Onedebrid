@@ -1,12 +1,21 @@
 package com.onedebrid.app.ui.player
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onedebrid.app.coordinator.PlaybackCoordinator
 import com.onedebrid.app.coordinator.PlaybackState as CoordinatorState
+import com.onedebrid.app.data.repository.RepositoryResult
+import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.domain.model.Episode
+import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
+import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.usecase.EndPlaybackSessionUseCase
+import com.onedebrid.app.usecase.GetActiveProfileUseCase
+import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
+import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.SavePlaybackPositionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -14,6 +23,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -26,50 +36,73 @@ import javax.inject.Inject
  * an enum in SessionState.kt describing the ExoPlayer lifecycle
  * (IDLE/BUFFERING/PLAYING/PAUSED/ENDED/ERROR), and a sealed interface in
  * PlaybackCoordinator.kt describing the resolve-and-start workflow
- * (Idle/Resolving/Ready/Error). This ViewModel is the first file that needs
- * both, so both are imported with aliases: CoordinatorState for the workflow
- * type, PlayerLifecycleState for the player lifecycle enum. Decided here
- * rather than renaming either source type, since neither name is wrong on
- * its own and a rename would ripple into files that already build cleanly.
- * If a third file ever needs both types, this alias pair should be reused
- * rather than reinvented.
+ * (Idle/Resolving/Ready/Error). Both are imported with aliases:
+ * CoordinatorState for the workflow type, PlayerLifecycleState for the
+ * player lifecycle enum. This alias pair originates here and is reused
+ * wherever else both types are needed.
  *
- * Scope of this ViewModel as written:
- * - Starts playback via PlaybackCoordinator.play(), given a PlaybackRequest
- *   and the active profile ID (the screen/nav layer is responsible for
- *   supplying both — this ViewModel does not look up the active profile
- *   itself, unlike HomeViewModel/SearchViewModel, because a Player screen
- *   is always entered with a specific request already in hand).
- * - Tracks CoordinatorState to know when resolution finished and a
- *   StreamSource is ready to hand to ExoPlayer, or whether it's still
- *   resolving or failed.
- * - Tracks PlayerLifecycleState as a plain field the eventual Compose
- *   player screen updates via onPlayerStateChanged(), driven by ExoPlayer's
- *   Player.Listener callbacks (onPlaybackStateChanged, onIsPlayingChanged).
- *   This ViewModel does not talk to ExoPlayer directly — that stays in the
- *   UI layer per the UI layer boundary rule in Technical_standards.md.
+ * Session 27 — replaced PendingPlaybackHolder:
+ * This ViewModel used to receive a ready-made PlaybackRequest (built by
+ * whichever screen navigated here) via PendingPlaybackHolder, an in-memory
+ * singleton that did not survive process death. As of Session 27, Player's
+ * nav route (Route.Player in NavGraph.kt) carries only primitives —
+ * mediaId (required), episodeId (optional), resumeMs (optional) — and this
+ * ViewModel resolves everything else itself:
+ * - Media via GetMediaByIdUseCase(mediaId)
+ * - Episode via GetEpisodeByIdUseCase(mediaId, episodeId), only if an
+ *   episodeId was actually passed
+ * - The active profile via GetActiveProfileUseCase(), same pattern
+ *   DetailsViewModel/HomeViewModel already use
+ * preferredSource is NOT resolvable this way — nothing in the app produces
+ * a pre-selected StreamCandidate yet (that's the stream-candidate picker
+ * UI, a separate not-yet-built feature). PlaybackRequest.preferredSource
+ * is always null here, same as it already was for every existing caller
+ * (HomeViewModel, DetailsViewModel) before this change — this is not a
+ * regression, just an explicitly acknowledged gap that was already true.
  *
- * Position saving and session ending (wired in Session 19):
- * - SavePlaybackPositionUseCase is called on a periodic ticker while the
- *   player reports PLAYING (every POSITION_SAVE_INTERVAL_MS), and once
- *   more immediately whenever the player reports PAUSED or ENDED. The
- *   ticker is cancelled whenever playback is not actively PLAYING, so it
- *   never runs while paused, buffering, idle, or errored.
- * - EndPlaybackSessionUseCase is called from stop() only. onCleared() only
- *   stops the position-save ticker — it cannot reliably run the suspend
- *   session-end call (see onCleared()'s doc comment below for why). This
- *   is a known gap when the screen is left without an explicit stop().
- * - This ViewModel still does not talk to ExoPlayer directly. It relies on
- *   the Compose player screen to report both the lifecycle state AND the
- *   current position via onPlayerStateChanged(), since only the screen
- *   holds the ExoPlayer instance that knows currentPosition.
+ * This resolve step happens once, in resolveAndPlay(), called from
+ * init{}. It is a NEW phase that did not exist before Session 27 — there
+ * is now a window where this ViewModel is resolving Media/Episode/profile
+ * before PlaybackCoordinator.play() can even be called. See ResolveState
+ * below for how this is tracked and exposed to the screen.
+ *
+ * Scope otherwise unchanged from Session 19-26:
+ * - Delegates actual stream resolution and session start to
+ *   PlaybackCoordinator once a PlaybackRequest and profileId are in hand.
+ * - Tracks CoordinatorState (Idle/Resolving/Ready/Error) for the
+ *   resolve-and-start workflow.
+ * - Tracks PlayerLifecycleState as reported by the Compose screen via
+ *   onPlayerStateChanged(), driven by ExoPlayer's Player.Listener. This
+ *   ViewModel never touches ExoPlayer directly (UI layer boundary rule,
+ *   Technical_standards.md).
+ * - Position saving / session ending: unchanged from Session 19, see
+ *   individual method doc comments below.
  */
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val playbackCoordinator: PlaybackCoordinator,
+    private val getMediaByIdUseCase: GetMediaByIdUseCase,
+    private val getEpisodeByIdUseCase: GetEpisodeByIdUseCase,
+    private val getActiveProfileUseCase: GetActiveProfileUseCase,
     private val savePlaybackPositionUseCase: SavePlaybackPositionUseCase,
     private val endPlaybackSessionUseCase: EndPlaybackSessionUseCase
 ) : ViewModel() {
+
+    private val mediaId: String = checkNotNull(savedStateHandle["mediaId"]) {
+        "PlayerScreen requires a mediaId nav argument"
+    }
+
+    // "none" / -1L are the sentinel values Route.Player.build() encodes
+    // absence as, since NavType.StringType/LongType nav args have no
+    // nullable variant that round-trips cleanly through SavedStateHandle
+    // via the simple navArgument {} builder used in NavGraph.kt. Mapped
+    // back to null here, immediately, so the rest of this class never
+    // needs to know the sentinels exist.
+    private val episodeId: String? =
+        (savedStateHandle["episodeId"] as? String)?.takeIf { it != "none" }
+    private val resumePositionMs: Long? =
+        (savedStateHandle["resumeMs"] as? Long)?.takeIf { it != -1L }
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -86,23 +119,124 @@ class PlayerViewModel @Inject constructor(
 
     private var positionSaveJob: Job? = null
 
+    // Kept around so retryResolve() (the resolve-phase equivalent of the
+    // screen's own onRetry for CoordinatorState.Error) can re-run the exact
+    // same resolve-and-play flow without duplicating resolveAndPlay()'s body.
+    private var activeProfileId: String? = null
+
     init {
         playbackCoordinator.state
             .onEach { coordinatorState ->
                 _uiState.value = _uiState.value.copy(coordinatorState = coordinatorState)
             }
             .launchIn(viewModelScope)
+
+        resolveAndPlay()
     }
 
     /**
-     * Begin resolving and starting playback for the given request.
+     * Resolves Media, Episode (if an episodeId was passed), and the active
+     * profile, then builds a PlaybackRequest and hands it to
+     * PlaybackCoordinator.play(). This is the Session 27 replacement for
+     * reading a ready-made PlaybackRequest out of PendingPlaybackHolder —
+     * see this class's own doc comment for the full reasoning.
      *
-     * Delegates entirely to PlaybackCoordinator, which handles resolution,
-     * session start, history recording, and cancellation of any prior
-     * in-progress request.
+     * GetActiveProfileUseCase returns a Flow (there is always an active
+     * profile once app state has settled, same assumption
+     * DetailsViewModel/HomeViewModel already make) — .first() is used
+     * rather than .onEach{}.launchIn() here because this ViewModel only
+     * needs the profile once, at resolve time, not as an ongoing
+     * subscription; unlike HomeViewModel/DetailsViewModel, nothing else in
+     * this ViewModel needs to react to a live profile switch mid-playback.
+     *
+     * Resolve failures (Media or Episode lookup failing — expected to be
+     * AppError.AllProvidersUnavailable in practice today, since
+     * MetadataProvider is still StubMetadataProvider, same caveat as
+     * GetMediaByIdUseCase's own doc comment) are surfaced via
+     * ResolveState.Error on PlayerUiState, which PlayerScreen renders using
+     * its existing ErrorContent composable — the same error presentation
+     * already used for CoordinatorState.Error, just reused for a different
+     * failure point. See PlayerScreen.kt for how the two are told apart.
      */
-    fun play(request: PlaybackRequest, profileId: String) {
-        playbackCoordinator.play(request, profileId)
+    private fun resolveAndPlay() {
+        _uiState.value = _uiState.value.copy(resolveState = ResolveState.Resolving)
+
+        viewModelScope.launch {
+            val profile = getActiveProfileUseCase().first()
+            activeProfileId = profile.id
+
+            val mediaResult = getMediaByIdUseCase(mediaId)
+            val media = when (mediaResult) {
+                is RepositoryResult.Success -> mediaResult.data
+                is RepositoryResult.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        resolveState = ResolveState.Error(mediaResult.error)
+                    )
+                    return@launch
+                }
+            }
+
+            val episode: Episode? = if (episodeId != null) {
+                when (val episodeResult = getEpisodeByIdUseCase(mediaId, episodeId)) {
+                    is RepositoryResult.Success -> episodeResult.data
+                    is RepositoryResult.Failure -> {
+                        _uiState.value = _uiState.value.copy(
+                            resolveState = ResolveState.Error(episodeResult.error)
+                        )
+                        return@launch
+                    }
+                }
+            } else {
+                null
+            }
+
+            _uiState.value = _uiState.value.copy(resolveState = ResolveState.Resolved)
+
+            val request = PlaybackRequest(
+                media = media,
+                episode = episode,
+                preferredSource = null,
+                resumePositionMs = resumePositionMs
+            )
+            playbackCoordinator.play(request, profile.id)
+        }
+    }
+
+    /**
+     * Retry after a resolve-phase failure (ResolveState.Error) — re-runs
+     * the entire resolve-and-play flow from scratch, same as retryMedia()
+     * on DetailsViewModel. Distinct from a CoordinatorState.Error retry
+     * (see PlayerScreen's onRetry, which re-plays a PlaybackRequest that
+     * already resolved successfully) — this retries the earlier phase,
+     * where Media/Episode/profile resolution itself failed before a
+     * PlaybackRequest could even be built.
+     */
+    fun retryResolve() {
+        resolveAndPlay()
+    }
+
+    /**
+     * Retry after a CoordinatorState.Error — re-plays with the same,
+     * already-resolved Media/Episode/profile rather than re-resolving them.
+     * Called by PlayerScreen's ErrorContent when coordinatorState is
+     * Error and resolveState is Resolved (see PlayerScreen.kt).
+     */
+    fun retryPlay() {
+        val profileId = activeProfileId ?: return
+        viewModelScope.launch {
+            val mediaResult = getMediaByIdUseCase(mediaId)
+            val media = (mediaResult as? RepositoryResult.Success)?.data ?: return@launch
+            val episode = episodeId?.let {
+                (getEpisodeByIdUseCase(mediaId, it) as? RepositoryResult.Success)?.data
+            }
+            val request = PlaybackRequest(
+                media = media,
+                episode = episode,
+                preferredSource = null,
+                resumePositionMs = resumePositionMs
+            )
+            playbackCoordinator.play(request, profileId)
+        }
     }
 
     /**
@@ -196,8 +330,8 @@ class PlayerViewModel @Inject constructor(
      * properly means the navigation/UI layer calling stop() itself before
      * tearing down the screen (e.g. from DisposableEffect's onDispose, or
      * an explicit back handler) rather than relying on onCleared() to do
-     * suspend work it structurally cannot do. That wiring belongs to the
-     * Compose player screen, not this ViewModel, and is not built yet.
+     * suspend work it structurally cannot do. This wiring exists in
+     * PlayerScreen's DisposableEffect.onDispose (see that file).
      */
     override fun onCleared() {
         stopPositionSaving()
@@ -208,22 +342,36 @@ class PlayerViewModel @Inject constructor(
 private const val POSITION_SAVE_INTERVAL_MS = 5_000L
 
 /**
+ * Tracks the Session 27 resolve phase — Media/Episode/active-profile
+ * lookup that now happens inside this ViewModel before a PlaybackRequest
+ * can be built, distinct from CoordinatorState (which only exists once a
+ * PlaybackRequest is already in hand). See resolveAndPlay()'s doc comment.
+ */
+sealed interface ResolveState {
+    data object Resolving : ResolveState
+    data object Resolved : ResolveState
+    data class Error(val error: AppError) : ResolveState
+}
+
+/**
  * The complete rendering state for the Player screen.
+ *
+ * resolveState: Session 27 addition. Where the Media/Episode/profile
+ * resolve phase is. PlayerScreen shows a resolving/error state here before
+ * coordinatorState becomes relevant at all — see PlayerScreen.kt for how
+ * the two states are composed together.
  *
  * coordinatorState: Where the resolve-and-start workflow is
  * (Idle/Resolving/Ready/Error) — drives whether to show a loading spinner,
- * an error view, or hand the resolved StreamSource to ExoPlayer.
+ * an error view, or hand the resolved StreamSource to ExoPlayer. Only
+ * meaningful once resolveState is Resolved.
  *
  * playerLifecycleState: What ExoPlayer itself is doing once a stream is
  * loaded (IDLE/BUFFERING/PLAYING/PAUSED/ENDED/ERROR) — drives playback
  * controls (play/pause icon, buffering spinner over the video surface).
- *
- * These are independent because a Ready coordinator state doesn't mean
- * the player has started playing yet — there's a gap between "stream
- * resolved" and "ExoPlayer reports PLAYING" that the UI needs to show
- * buffering for.
  */
 data class PlayerUiState(
+    val resolveState: ResolveState = ResolveState.Resolving,
     val coordinatorState: CoordinatorState = CoordinatorState.Idle,
     val playerLifecycleState: PlayerLifecycleState = PlayerLifecycleState.IDLE
 )

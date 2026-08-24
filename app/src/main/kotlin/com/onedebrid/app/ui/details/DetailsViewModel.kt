@@ -8,10 +8,7 @@ import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
-import com.onedebrid.app.domain.model.PlaybackRequest
-import com.onedebrid.app.domain.model.UserProfile
-import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
-import com.onedebrid.app.usecase.GetActiveProfileUseCase
+import com.onedebrid.app.ui.navigation.PlayerNavArgs
 import com.onedebrid.app.usecase.GetEpisodesUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,8 +17,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -61,30 +56,40 @@ data class DetailsUiState(
  * MediaType.MOVIE and MediaType.TV_SHOW results, closing the "TV_SHOW not
  * yet supported" gap flagged in SearchScreen's Session 25 doc comment).
  * Continue Watching's tap-to-resume flow (HomeViewModel.onItemClick) is
- * deliberately NOT routed through this screen — it resolves straight to
+ * deliberately NOT routed through this screen — it navigates straight to
  * Player to preserve exact resumePositionMs resume behavior, which this
  * screen's play actions do not carry (see onPlayMovie/onPlayEpisode below).
  * This was an explicit scope decision, not an oversight — see
  * currentsprint.md Session 26 notes.
  *
- * Takes only a mediaId via SavedStateHandle (nav args still can't carry a
- * full Media, same constraint documented throughout NavGraph.kt/
- * PendingPlaybackHolder.kt) and re-fetches the full Media itself via
- * GetMediaByIdUseCase on init, exactly like HomeViewModel.onItemClick does
- * for Continue Watching rows — even though SearchScreen already had a full
- * Media in hand at the moment of the tap that led here. This is a
- * deliberate small inefficiency (one extra cache-backed lookup) in exchange
- * for a single, simple entry path into this screen rather than two (one
- * for callers with a Media already in hand, one for callers with only an
- * id) — see currentsprint.md Session 26 notes for the reasoning.
+ * Takes only a mediaId via SavedStateHandle and re-fetches the full Media
+ * itself via GetMediaByIdUseCase on init, exactly like HomeViewModel used
+ * to do for Continue Watching rows before Session 27 (see HomeViewModel's
+ * own doc comment for why that screen no longer does this) — even though
+ * SearchScreen already had a full Media in hand at the moment of the tap
+ * that led here. This is a deliberate small inefficiency (one extra
+ * cache-backed lookup) in exchange for a single, simple entry path into
+ * this screen rather than two (one for callers with a Media already in
+ * hand, one for callers with only an id) — see currentsprint.md Session 26
+ * notes for the reasoning. This screen's own case is not quite the same
+ * shape as Home's was: Details still needs the full Media for its own
+ * rendering (title, overview, episode list), not just to pass an id
+ * onward, so re-fetching here remains necessary regardless of what Player
+ * does with its own copy.
+ *
+ * Session 27 change: onPlayMovie/onPlayEpisode no longer build a
+ * PlaybackRequest or read the active profile — they emit nav args
+ * (mediaId, optional episodeId) via [navigateToPlayer], and PlayerViewModel
+ * resolves Media/Episode/active-profile itself once Player is reached (see
+ * PlayerViewModel.kt). This ViewModel therefore no longer needs
+ * GetActiveProfileUseCase or PendingPlaybackHolder (the latter deleted
+ * this session) at all.
  */
 @HiltViewModel
 class DetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getMediaByIdUseCase: GetMediaByIdUseCase,
-    private val getEpisodesUseCase: GetEpisodesUseCase,
-    private val getActiveProfileUseCase: GetActiveProfileUseCase,
-    private val pendingPlaybackHolder: PendingPlaybackHolder
+    private val getEpisodesUseCase: GetEpisodesUseCase
 ) : ViewModel() {
 
     private val mediaId: String = checkNotNull(savedStateHandle["mediaId"]) {
@@ -94,22 +99,16 @@ class DetailsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DetailsUiState())
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()
 
-    // Same one-shot-navigation-event reasoning as HomeViewModel.navigateToPlayer:
-    // a Channel rather than a second StateFlow so the event fires exactly once
-    // and is never replayed on recomposition/configuration change.
-    private val _navigateToPlayer = Channel<Unit>(Channel.BUFFERED)
-    val navigateToPlayer: Flow<Unit> = _navigateToPlayer.receiveAsFlow()
-
-    // Mirrors SearchViewModel/HomeViewModel's pattern: tracked privately so
-    // the play actions can read profileId synchronously without re-collecting
-    // the active profile Flow on every tap.
-    private val _activeProfile = MutableStateFlow<UserProfile?>(null)
+    //// Session 27: carries PlayerNavArgs (ui.navigation — shared with
+    // HomeViewModel) instead of Unit, since Route.Player.build() now needs
+    // mediaId/episodeId as real nav args rather than reading a
+    // PlaybackRequest out of PendingPlaybackHolder. A Channel rather than a
+    // second StateFlow so the event fires exactly once and is never
+    // replayed on recomposition/configuration change.
+    private val _navigateToPlayer = Channel<PlayerNavArgs>(Channel.BUFFERED)
+    val navigateToPlayer: Flow<PlayerNavArgs> = _navigateToPlayer.receiveAsFlow()
 
     init {
-        getActiveProfileUseCase()
-            .onEach { profile -> _activeProfile.value = profile }
-            .launchIn(viewModelScope)
-
         loadMedia()
     }
 
@@ -169,43 +168,37 @@ class DetailsViewModel @Inject constructor(
     }
 
     /**
-     * Play a MediaType.MOVIE. No-op if media hasn't loaded yet or no
-     * profile is active — mirrors the guard pattern used throughout
-     * SearchViewModel/HomeViewModel.
+     * Play a MediaType.MOVIE. No-op if media hasn't loaded yet.
      *
-     * Always starts from the beginning (resumePositionMs = null) — this
-     * screen has no resume-position context, unlike Continue Watching's
-     * direct-to-Player flow. A future enhancement could check Continue
-     * Watching for this mediaId and offer resume-from-here, but that's out
-     * of scope for this session (see currentsprint.md Session 26 notes).
+     * Always starts from the beginning (resumeMs = null) — this screen has
+     * no resume-position context, unlike Continue Watching's flow. A future
+     * enhancement could check Continue Watching for this mediaId and offer
+     * resume-from-here, but that's out of scope for this session (see
+     * currentsprint.md Session 26 notes — unchanged reasoning as of
+     * Session 27).
      */
     fun onPlayMovie() {
         val media = _uiState.value.media ?: return
-        val profileId = _activeProfile.value?.id ?: return
-
-        val request = PlaybackRequest(
-            media = media,
-            episode = null,
-            preferredSource = null
+        _navigateToPlayer.trySend(
+            PlayerNavArgs(
+                mediaId = media.id,
+                episodeId = null,
+                resumeMs = null
+            )
         )
-        pendingPlaybackHolder.set(request, profileId)
-        _navigateToPlayer.trySend(Unit)
     }
 
     /**
-     * Play a specific episode of a MediaType.TV_SHOW. Same no-op guards and
+     * Play a specific episode of a MediaType.TV_SHOW. Same no-op guard and
      * same "always starts from the beginning" caveat as onPlayMovie().
      */
     fun onPlayEpisode(episode: Episode) {
         val media = _uiState.value.media ?: return
-        val profileId = _activeProfile.value?.id ?: return
-
-        val request = PlaybackRequest(
-            media = media,
-            episode = episode,
-            preferredSource = null
+        _navigateToPlayer.trySend(
+            PlayerNavArgs(
+                mediaId = media.id,
+                episodeId = episode.id,
+                resumeMs = null
+            )
         )
-        pendingPlaybackHolder.set(request, profileId)
-        _navigateToPlayer.trySend(Unit)
     }
-}

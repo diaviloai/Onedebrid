@@ -55,16 +55,21 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsScreen(
-    onNavigateToPlayer: () -> Unit,
+    onNavigateToPlayer: (mediaId: String, episodeId: String?, resumeMs: Long?) -> Unit,
     onNavigateBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DetailsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    // Session 27: navigateToPlayer now carries the nav args
+    // Route.Player.build() needs (mediaId/episodeId/resumeMs), replacing
+    // PendingPlaybackHolder — see DetailsViewModel.kt's doc comment.
+    // resumeMs is always null from this screen (Details has no resume
+    // context), unchanged from before this session.
     LaunchedEffect(viewModel) {
-        viewModel.navigateToPlayer.collectLatest {
-            onNavigateToPlayer()
+        viewModel.navigateToPlayer.collectLatest { navArgs ->
+            onNavigateToPlayer(navArgs.mediaId, navArgs.episodeId, navArgs.resumeMs)
         }
     }
 

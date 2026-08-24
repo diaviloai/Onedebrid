@@ -30,7 +30,6 @@ import com.onedebrid.app.ui.settings.SettingsScreen
  */
 sealed class Route(val path: String) {
     data object Home : Route("home")
-    data object Player : Route("player")
     data object Search : Route("search")
     data object Settings : Route("settings")
 
@@ -39,13 +38,44 @@ sealed class Route(val path: String) {
      * in this graph to carry one. path is the pattern registered with
      * NavHost ("details/{mediaId}"); [build] produces the concrete route
      * string a caller navigates to for a specific mediaId. A plain string
-     * argument, not a full Media, for the same reason documented
-     * throughout this file and PendingPlaybackHolder.kt: nav args can't
-     * carry domain objects, so DetailsViewModel re-fetches the full Media
-     * itself via GetMediaByIdUseCase — see its own doc comment.
+     * argument, not a full Media, since nav args can't carry domain
+     * objects — DetailsViewModel re-fetches the full Media itself via
+     * GetMediaByIdUseCase.
      */
     data object Details : Route("details/{mediaId}") {
         fun build(mediaId: String): String = "details/$mediaId"
+    }
+
+    /**
+     * Player takes mediaId, an optional episodeId, and an optional
+     * resumeMs, all as nav args (Session 27) — replacing
+     * PendingPlaybackHolder, which was an in-memory singleton that did not
+     * survive process death (see that file's former doc comment, and
+     * currentsprint.md's Session 27 notes for the full before/after
+     * reasoning).
+     *
+     * episodeId is a query-style optional argument (defaultValue = "none")
+     * rather than a required path segment, since a movie has no episode.
+     * NavType has no nullable-String-with-null-default support in the
+     * simple navArgument {} builder used here in a way that round-trips
+     * cleanly through SavedStateHandle, so the sentinel string "none" is
+     * used instead and mapped back to null in PlayerViewModel. This
+     * mirrors how resumeMs (a Long) uses -1L as its "no value" sentinel
+     * for the same underlying reason — NavType.LongType has no nullable
+     * variant either. Both sentinels are documented again at the point
+     * PlayerViewModel reads them, since that's where the mapping back to
+     * null actually happens.
+     *
+     * build() takes nullable episodeId/resumeMs directly so call sites
+     * never need to know about the sentinel values themselves — only this
+     * file and PlayerViewModel's SavedStateHandle-reading code do.
+     */
+    data object Player : Route("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}") {
+        fun build(mediaId: String, episodeId: String? = null, resumeMs: Long? = null): String {
+            val episodeArg = episodeId ?: "none"
+            val resumeArg = resumeMs ?: -1L
+            return "player/$mediaId?episodeId=$episodeArg&resumeMs=$resumeArg"
+        }
     }
 }
 
@@ -53,55 +83,46 @@ sealed class Route(val path: String) {
  * The app's single NavHost.
  *
  * Home is wired to the real HomeScreen composable. As of Session 25,
- * Continue Watching rows are tappable to resume playback via the Media
- * cache/lookup layer (MediaCache + GetMediaByIdUseCase) — see
- * HomeScreen.kt's own doc comment for the resolve flow and its one
- * remaining deliberate limitation (resolution can fail today since
- * MetadataProvider is still a stub).
+ * Continue Watching rows are tappable to resume playback. As of Session
+ * 27, tapping a row navigates directly to Player via nav args
+ * (Route.Player.build()) rather than resolving a full Media first and
+ * populating PendingPlaybackHolder — see HomeScreen.kt/HomeViewModel.kt's
+ * own doc comments for what changed and why (PendingPlaybackHolder no
+ * longer exists in this codebase as of Session 27).
  *
- * Player is wired for real. It reads its PlaybackRequest from
- * PendingPlaybackHolder rather than from nav arguments — see that file's
- * doc comment for why (nav args still can't carry a full PlaybackRequest;
- * the Media lookup layer added Session 25 closes the original blocker
- * for HomeScreen's tap-to-resume specifically, but PendingPlaybackHolder
- * itself has not been replaced — see its doc comment for what would still
- * be needed to do that, e.g. process-death survival). onMissingRequest
- * routes back to Home, since a Player entry with nothing pending (e.g.
- * restored back stack after process death, per PendingPlaybackHolder's
- * documented limitation) has nothing to show.
+ * Player is wired for real. As of Session 27 it reads mediaId/episodeId/
+ * resumeMs from nav arguments via SavedStateHandle, and resolves its own
+ * Media/Episode/active-profile from there — see PlayerViewModel.kt's doc
+ * comment for the full resolve flow this replaced (PendingPlaybackHolder).
+ * There is no onMissingRequest case anymore: a mediaId is always present
+ * (it's a required path segment, not optional), so there is always
+ * something for PlayerViewModel to attempt to resolve, even if that
+ * resolution can itself fail (surfaced as an error state on the Player
+ * screen itself, same as any other resolution failure).
  *
  * Search is wired for real. Navigating to it from Home is a plain forward
  * navigate() with no popUpTo — Search sits on top of Home on the back
  * stack, so a back-press from Search returns to Home normally, matching
- * the flat navigation structure described in UI_UX_Design.md. As of
- * Session 26, tapping ANY search result (movie or TV show) navigates to
- * Details rather than SearchScreen populating PendingPlaybackHolder
- * itself — this closed the "TV_SHOW not yet playable" gap from Session 25
- * by giving TV shows a real destination (an episode picker) instead of
- * disabling them. See SearchScreen.kt's own doc comment for its one
- * remaining deliberate limitation (no manual stream-source picker yet).
+ * the flat navigation structure described in UI_UX_Design.md. Tapping any
+ * search result (movie or TV show) navigates to Details.
  *
  * Settings is wired for real (Session 23), reached the same way as
  * Search — a plain forward navigate() from Home with no popUpTo, so
  * back-press returns to Home normally. SettingsScreen.kt takes no
- * PendingPlaybackHolder or navigation callbacks of its own; it is a leaf
- * destination in this graph (no further forward navigation happens from
- * it yet).
+ * navigation callbacks of its own; it is a leaf destination in this graph.
  *
  * Details is wired for real (Session 26), reached only from Search today.
- * Takes a mediaId nav argument (Route.Details.build()) — the first route
- * in this graph to carry an argument. Renders movie details with a Play
- * action, or a TV show's episode list. Both actions populate
- * PendingPlaybackHolder and navigate to Player the same way Search used
- * to directly — see DetailsScreen.kt/DetailsViewModel.kt's own doc
- * comments, including why Continue Watching's tap-to-resume flow is
- * deliberately NOT routed through here (resume-position preservation).
- * Back-press returns to Search normally (popBackStack(), no special
- * popUpTo needed since Details never becomes a start destination).
+ * Takes a mediaId nav argument. Renders movie details with a Play action,
+ * or a TV show's episode list. As of Session 27, both actions navigate
+ * directly to Player via nav args, same as Home — see
+ * DetailsScreen.kt/DetailsViewModel.kt's own doc comments, including why
+ * Continue Watching's tap-to-resume flow is deliberately NOT routed
+ * through here (resume-position preservation). Back-press returns to
+ * Search normally (popBackStack(), no special popUpTo needed since
+ * Details never becomes a start destination).
  */
 @Composable
 fun NavGraph(
-    pendingPlaybackHolder: PendingPlaybackHolder,
     navController: NavHostController = rememberNavController(),
     modifier: Modifier = Modifier
 ) {
@@ -118,34 +139,27 @@ fun NavGraph(
                 onNavigateToSettings = {
                     navController.navigate(Route.Settings.path)
                 },
-                onNavigateToPlayer = {
-                    // Same plain forward navigate() SearchScreen already
-                    // uses to reach Player (Session 25) — HomeViewModel
-                    // has already populated PendingPlaybackHolder by the
-                    // time this fires, since the navigation event is only
-                    // emitted after a successful resolve+set() (see
-                    // HomeViewModel.onItemClick).
-                    navController.navigate(Route.Player.path)
+                onNavigateToPlayer = { mediaId, episodeId, resumeMs ->
+                    navController.navigate(Route.Player.build(mediaId, episodeId, resumeMs))
                 }
             )
         }
 
-        composable(Route.Player.path) {
-            PlayerScreen(
-                pendingPlaybackHolder = pendingPlaybackHolder,
-                onMissingRequest = {
-                    navController.navigate(Route.Home.path) {
-                        // Clears Player off the back stack so a subsequent
-                        // back-press from Home doesn't return to the same
-                        // empty Player entry. popUpTo(startDestination)
-                        // with inclusive = true also handles the case where
-                        // Home itself is what's being popped through, since
-                        // Home is the start destination and there's nothing
-                        // before it to worry about losing.
-                        popUpTo(Route.Home.path) { inclusive = true }
-                    }
+        composable(
+            route = Route.Player.path,
+            arguments = listOf(
+                navArgument("mediaId") { type = NavType.StringType },
+                navArgument("episodeId") {
+                    type = NavType.StringType
+                    defaultValue = "none"
+                },
+                navArgument("resumeMs") {
+                    type = NavType.LongType
+                    defaultValue = -1L
                 }
             )
+        ) {
+            PlayerScreen()
         }
 
         composable(Route.Search.path) {
@@ -165,8 +179,8 @@ fun NavGraph(
             arguments = listOf(navArgument("mediaId") { type = NavType.StringType })
         ) {
             DetailsScreen(
-                onNavigateToPlayer = {
-                    navController.navigate(Route.Player.path)
+                onNavigateToPlayer = { mediaId, episodeId, resumeMs ->
+                    navController.navigate(Route.Player.build(mediaId, episodeId, resumeMs))
                 },
                 onNavigateBack = {
                     navController.popBackStack()

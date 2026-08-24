@@ -16,9 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.onedebrid.app.ui.navigation.NavGraph
-import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
 import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 
 /**
  * The single Activity for OneDebrid.
@@ -30,18 +28,14 @@ import javax.inject.Inject
  *
  * Contains no business logic. Navigation and all UI state live
  * in the composable tree below this entry point.
+ *
+ * As of Session 27, no longer field-injects PendingPlaybackHolder — that
+ * class was deleted this session. NavGraph resolves entirely through nav
+ * arguments now (see NavGraph.kt/PlayerViewModel.kt doc comments for the
+ * full before/after).
  */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    // PendingPlaybackHolder is a @Singleton (see that class's own file for
-    // why it exists and its known limitations) — field-injected here
-    // because MainActivity itself, not a ViewModel, is what needs to hand
-    // it down into the composable tree. Hilt resolves the same singleton
-    // instance that any screen ViewModel further down would also receive
-    // if it injected PendingPlaybackHolder directly.
-    @Inject
-    lateinit var pendingPlaybackHolder: PendingPlaybackHolder
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -56,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NavGraph(pendingPlaybackHolder = pendingPlaybackHolder)
+                    NavGraph()
                 }
             }
         }

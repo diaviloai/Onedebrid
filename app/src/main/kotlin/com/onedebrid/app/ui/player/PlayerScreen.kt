@@ -32,7 +32,6 @@ import com.onedebrid.app.R
 import com.onedebrid.app.coordinator.PlaybackState as CoordinatorState
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
-import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
 
 /**
  * The Player screen.
@@ -52,68 +51,52 @@ import com.onedebrid.app.ui.navigation.PendingPlaybackHolder
  * has no other way to know what the player is actually doing or where it
  * currently is.
  *
- * request/profileId are no longer accepted as plain parameters. They are
- * read from PendingPlaybackHolder on entry — see that file for why nav args
- * alone can't carry a full PlaybackRequest, and for the known process-death
- * limitation that comes with this approach. onMissingRequest is invoked if
- * the holder is empty (e.g. this screen was reached via restored back stack
- * after process death rather than a real navigate() call from a screen that
- * set the holder first) — the caller (the nav graph) decides where to send
- * the user in that case, since "go back to Home" is a navigation decision,
- * not something this screen should hardcode.
+ * Session 27 — no more PendingPlaybackHolder:
+ * This screen used to take pendingPlaybackHolder and onMissingRequest as
+ * parameters, reading a pre-built PlaybackRequest out of the holder on
+ * first composition. As of Session 27, PlayerViewModel resolves entirely
+ * from nav arguments (via SavedStateHandle) on its own — this screen no
+ * longer takes any parameters beyond the standard modifier/viewModel, and
+ * there is no onMissingRequest case anymore, since a mediaId is always
+ * present as a required path segment. See PlayerViewModel.kt's doc comment
+ * for the full resolve flow this screen now waits on.
+ *
+ * Two-phase state:
+ * uiState.resolveState (Resolving/Resolved/Error) covers the new Session 27
+ * resolve phase — looking up Media/Episode/active profile from nav args.
+ * uiState.coordinatorState (Idle/Resolving/Ready/Error) covers the
+ * pre-existing resolve-and-start-playback phase, which only becomes
+ * meaningful once resolveState is Resolved. This screen renders
+ * resolveState first: while it's Resolving or Error, coordinatorState is
+ * not yet meaningful (PlaybackCoordinator.play() hasn't been called yet)
+ * and is ignored.
  */
 @Composable
 fun PlayerScreen(
-    pendingPlaybackHolder: PendingPlaybackHolder,
-    onMissingRequest: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Read the pending request exactly once, at first composition, and
-    // remember it for the lifetime of this screen instance. Reading it
-    // inside `remember` rather than on every recomposition matters here:
-    // consume() clears the holder as a side effect, so calling it more than
-    // once per screen entry would find nothing the second time.
-    val pending = remember { pendingPlaybackHolder.consume() }
-
     // ExoPlayer is created once per screen instance and lives for as long as
     // this composable is in the composition. `remember` (not
     // rememberSaveable — ExoPlayer isn't parcelable) ties its lifetime to
     // composition, matching the DisposableEffect below that releases it.
-    // Created unconditionally even if `pending` is null, so the missing-
-    // request DisposableEffect below has a consistent instance to release.
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()
     }
 
-    // Handles the case where PendingPlaybackHolder had nothing to give —
-    // see the class doc on PendingPlaybackHolder for when this happens.
-    // Guarded so it fires once, not on every recomposition.
-    if (pending == null) {
-        DisposableEffect(Unit) {
-            onMissingRequest()
-            onDispose { exoPlayer.release() }
-        }
-        return
-    }
-
-    // Kick off resolution exactly once when the screen first composes.
-    // PlaybackCoordinator.play() internally cancels any prior in-progress
-    // request, so re-triggering this on recomposition would be wasted work,
-    // not a correctness bug — but keying on Unit keeps it to a single call
-    // per screen entry, matching how play() is documented to be used.
+    // Releases ExoPlayer and stops the playback session on teardown,
+    // regardless of which phase (resolve or coordinator) the screen was in
+    // when the user navigated away. This is the actual fix for the Session
+    // 19 gap — onDispose fires reliably on back gesture, forward
+    // navigation, or any other teardown of this screen — unlike
+    // onCleared(), it runs while viewModelScope is still alive, so stop()'s
+    // suspend call to EndPlaybackSessionUseCase actually completes instead
+    // of being cancelled mid-flight.
     DisposableEffect(Unit) {
-        viewModel.play(pending.request, pending.profileId)
         onDispose {
-            // This call is the actual fix for the gap flagged in Session 19.
-            // onDispose fires reliably on back gesture, forward navigation,
-            // or any other teardown of this screen — unlike onCleared(),
-            // it runs while viewModelScope is still alive, so stop()'s
-            // suspend call to EndPlaybackSessionUseCase actually completes
-            // instead of being cancelled mid-flight.
             viewModel.stop()
             exoPlayer.release()
         }
@@ -178,16 +161,27 @@ fun PlayerScreen(
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        when (coordinatorState) {
-            is CoordinatorState.Idle,
-            is CoordinatorState.Resolving -> ResolvingContent()
+        when (val resolveState = uiState.resolveState) {
+            is ResolveState.Resolving -> ResolvingContent()
 
-            is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
-
-            is CoordinatorState.Error -> ErrorContent(
-                error = coordinatorState.error,
-                onRetry = { viewModel.play(pending.request, pending.profileId) }
+            is ResolveState.Error -> ErrorContent(
+                error = resolveState.error,
+                onRetry = { viewModel.retryResolve() }
             )
+
+            is ResolveState.Resolved -> {
+                when (coordinatorState) {
+                    is CoordinatorState.Idle,
+                    is CoordinatorState.Resolving -> ResolvingContent()
+
+                    is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
+
+                    is CoordinatorState.Error -> ErrorContent(
+                        error = coordinatorState.error,
+                        onRetry = { viewModel.retryPlay() }
+                    )
+                }
+            }
         }
     }
 }
@@ -240,6 +234,11 @@ private fun ResolvingContent() {
  *   retry offered (e.g. NoCachedStreamAvailable, NotAuthenticated — trying
  *   the exact same request again would fail the same way).
  *
+ * As of Session 27, this is shared between resolveState's Error and
+ * coordinatorState's Error — both wrap an AppError and both fit these same
+ * tiers, so a single composable and error-message mapping serve both call
+ * sites (see PlayerScreen's when block above).
+ *
  * The UI/UX doc's third tier, Non-blocking/Background (Snackbar), is
  * deliberately not used on this screen. That tier is for failures that
  * don't block the rest of the screen, like metadata enrichment failing
@@ -290,6 +289,11 @@ private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
  * Kept local to this screen rather than added to AppError itself —
  * AppError is a domain type and should not own presentation strings
  * (Technical_standards.md: DTOs/domain types stay presentation-agnostic).
+ *
+ * AppError.Unknown's generic message now also covers the Session 27
+ * "episode not found" case from GetEpisodeByIdUseCase/MediaRepositoryImpl —
+ * see that method's doc comment. No dedicated string was added for it,
+ * consistent with Unknown already being a catch-all case here.
  */
 @Composable
 private fun errorMessage(error: AppError): String = when (error) {

@@ -34,6 +34,30 @@ interface MediaRepository {
     suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>>
 
     /**
+     * Resolve a single Episode by its id, given the parent show's mediaId.
+     *
+     * Added in Session 27 for PlayerViewModel, which resolves an episode
+     * from a nav-arg episodeId rather than receiving a full Episode object
+     * directly (see PlayerViewModel's doc comment).
+     *
+     * Implementation note: as of Session 27 there is no per-episode cache
+     * entry or provider call — MetadataProvider only fetches full episode
+     * lists per show. This is implemented via getEpisodes() plus an
+     * in-memory filter to the matching id. That is an internal detail and
+     * may change (e.g. once a real per-episode-capable MetadataProvider
+     * exists) without affecting callers of this method.
+     *
+     * Returns AppError.Unknown if getEpisodes() succeeds but no episode
+     * in the list matches episodeId — this should be rare (it means a
+     * caller passed an episodeId that doesn't belong to mediaId) but is
+     * not impossible, e.g. if metadata changed between when the id was
+     * captured and when it was looked up again. Flagged as a case worth
+     * a proper AppError type in the future error-model review (see open
+     * TODO in currentsprint.md re: AppError.ValidationError).
+     */
+    suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode>
+
+    /**
      * Check whether a stream candidate is cached on the debrid service
      * and resolve it to a direct playable URL.
      *

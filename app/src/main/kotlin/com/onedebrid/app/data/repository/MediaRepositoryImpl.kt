@@ -127,4 +127,30 @@ class MediaRepositoryImpl @Inject constructor(
             message = "Parsing error: ${cause.message}"
         )
     }
-}
+}/**
+     * Implemented via getEpisodes() (cache-first) plus an in-memory filter
+     * to the matching episodeId. See the doc comment on this method in
+     * MediaRepository.kt for why there is no dedicated per-episode cache
+     * entry or provider call as of Session 27.
+     */
+    override suspend fun getEpisodeById(
+        mediaId: String,
+        episodeId: String
+    ): RepositoryResult<Episode> =
+        when (val episodesResult = getEpisodes(mediaId)) {
+            is RepositoryResult.Success -> {
+                val match = episodesResult.data.find { it.id == episodeId }
+                if (match != null) {
+                    RepositoryResult.Success(match)
+                } else {
+                    RepositoryResult.Failure(
+                        AppError.Unknown(
+                            message = "Episode not found: $episodeId (mediaId: $mediaId)"
+                        )
+                    )
+                }
+            }
+            is RepositoryResult.Failure -> episodesResult
+        }
+
+    override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
