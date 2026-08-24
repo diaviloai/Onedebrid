@@ -8,39 +8,46 @@ This file is fully rewritten each session — it reflects actual current
 code state, verified by pulling the repo and reading files directly, not
 appended to informally.
 
-Build verification: project compiles cleanly as of Session 26's close,
-confirmed via GitHub Actions on commit `fdedc16` ("update") — job "build"
-succeeded in 4m 6s, per the direct run/job URL Dia provided
-(`github.com/diaviloai/Onedebrid/actions/runs/32326148911/job/96297691726`),
-fetched via web_fetch since the GitHub Actions jobs API hit the same
-shared-IP rate limit as prior sessions. The only annotations on the run
-are Gradle cache-service infrastructure warnings ("Our services aren't
-available right now") and Node 20/setup-java v4 deprecation notices; none
-relate to this session's code. All files touched this session — including
-the Session-25-era `Media.kt` fix (see below) — were independently
-re-pulled from `raw.githubusercontent.com` and diff-checked against what
-was delivered before this file was updated.
+Build verification: project compiles cleanly as of Session 27's close,
+confirmed via GitHub Actions on the latest pushed commit — job "build"
+succeeded, per the direct run/job URL Dia provided
+(`github.com/diaviloai/Onedebrid/actions/runs/32750760290/job/97506903198`).
+This was a **retry** of an earlier run this session
+(`runs/32691516649/job/97325924983`) that failed for two different
+reasons in sequence — see "Session 27 — What Was Done" below for the
+full account, including a real compile-breaking mistake made and fixed
+within this session. All files touched this session were independently
+re-pulled from `raw.githubusercontent.com` after the fix and structurally
+verified (brace-balance checked, tails inspected) before this file was
+updated.
 
-**Important correction from this session:** the version of this file
-carried into Session 26 (reflecting Session 25's close) claimed
-`domain/model/Media.kt` had `@Serializable` added to the `Media` class
-itself. On a fresh read at the start of this session, that was false —
-only `MediaType` (the enum in the same file) had the annotation; `Media`
-did not. Since `MediaCache.kt` calls `json.encodeToString(media)` /
-`json.decodeFromString<Media>(...)` directly, this should require a
-compile-time serializer for `Media`. Verified against the actual Session
-25 CI job log (not just the green/red status) that the build had
-genuinely succeeded despite this — the discrepancy is unresolved as a
-"why did that compile," but is now moot: `@Serializable` was added to
-`Media` this session (commit `291cc10`), verified green independently,
-and the live file confirmed to match. Recorded here, not swept under the
-rug, per Dia's standing preference for honest documentation of build
-problems.
+**Sessions 1–25 summary** (condensed from prior full write-ups, which
+remain in git history on this file if the detail is ever needed): built
+layer by layer — domain models → error types → provider interfaces →
+repository interfaces → Room entities/DAOs → Hilt wiring → coroutine
+infrastructure → use cases → coordinators → ViewModels → Compose screens
+(SearchScreen, HomeScreen, SettingsScreen). Session 25 added Continue
+Watching tap-to-resume (`PendingPlaybackHolder` + direct-to-Player nav)
+and cache-first `MediaRepository` reads via `MediaCache`.
+
+**Session 26 summary:** built the Details/Episode-picker screen
+(`ui/details/DetailsScreen.kt` + `DetailsViewModel.kt`), reached only from
+Search. `Route.Details` became the first route in the graph to carry a
+`mediaId` nav arg. Search's results became fully tappable (closing the
+"TV_SHOW not yet supported" gap). Continue Watching's direct-to-Player
+flow was deliberately left unchanged (explicit scope decision, to
+preserve exact `resumePositionMs` behavior). Also fixed a real
+pre-existing bug: `Media.kt` was missing `@Serializable` on the `Media`
+class itself despite `MediaCache.kt` requiring it for JSON
+encode/decode — found on a fresh read at the start of that session
+(despite Session 25's handoff claiming it was already fixed), corrected,
+verified independently green.
 
 ## Package Structure
 
 com.onedebrid.app/
-    ├── MainActivity.kt
+    ├── MainActivity.kt (Session 27: no longer field-injects
+    │   PendingPlaybackHolder — that class deleted this session)
     ├── OneDebridApplication.kt
     ├── coordinator/
     │   ├── PlaybackCoordinator.kt
@@ -50,26 +57,19 @@ com.onedebrid.app/
     │   ├── local/
     │   │   ├── AppDatabase.kt
     │   │   ├── MediaCache.kt (Session 25 — wraps CacheEntryDao for
-    │   │   │   Media/Episode-list JSON caching)
+    │   │   │   Media/Episode-list JSON caching; doc-comment-only
+    │   │   │   PendingPlaybackHolder reference still pending cleanup,
+    │   │   │   see Open TODOs)
     │   │   ├── TypeConverters.kt
-    │   │   ├── dao/
-    │   │   │   ├── CacheEntryDao.kt
-    │   │   │   ├── ContinueWatchingDao.kt
-    │   │   │   ├── DownloadDao.kt
-    │   │   │   ├── ProfileDao.kt
-    │   │   │   ├── RecentlyPlayedDao.kt
-    │   │   │   └── SearchHistoryDao.kt
-    │   │   └── entity/
-    │   │       ├── CacheEntryEntity.kt
-    │   │       ├── ContinueWatchingEntity.kt
-    │   │       ├── DownloadEntity.kt
-    │   │       ├── ProfileEntity.kt
-    │   │       ├── RecentlyPlayedEntity.kt
-    │   │       └── SearchHistoryEntity.kt
+    │   │   ├── dao/ (unchanged)
+    │   │   └── entity/ (unchanged)
     │   └── repository/
-    │       ├── MediaRepository.kt / MediaRepositoryImpl.kt (Session 25:
-    │       │   getMediaDetails()/getEpisodes() cache-first via
-    │       │   MediaCache, write-through on a successful fetch)
+    │       ├── MediaRepository.kt (Session 27: added
+    │       │   getEpisodeById(mediaId, episodeId) to the interface)
+    │       ├── MediaRepositoryImpl.kt (Session 27: implements
+    │       │   getEpisodeById() via getEpisodes() + in-memory filter —
+    │       │   see "What Was Done" below for a build-breaking mistake
+    │       │   made and fixed while adding this)
     │       ├── PlaybackRepository.kt / PlaybackRepositoryImpl.kt
     │       ├── ProfileRepository.kt / ProfileRepositoryImpl.kt
     │       ├── RepositoryResult.kt
@@ -82,11 +82,12 @@ com.onedebrid.app/
     │       needed changes this session)
     ├── domain/
     │   ├── error/
-    │   │   └── AppError.kt
+    │   │   └── AppError.kt (Unknown case now also covers
+    │   │       getEpisodeById()'s not-found case, Session 27 — see Open
+    │   │       TODOs re: future ValidationError-style review)
     │   └── model/
-    │       ├── Media.kt (Session 26: @Serializable added to the Media
-    │       │   class itself — see "Important correction" above)
-    │       ├── Episode.kt (@Serializable present since Session 25)
+    │       ├── Media.kt
+    │       ├── Episode.kt
     │       ├── PlaybackRequest.kt
     │       ├── SearchResult.kt
     │       ├── SessionState.kt (SessionState, PlaybackSession,
@@ -98,29 +99,44 @@ com.onedebrid.app/
     │       └── WatchedItem.kt
     ├── provider/
     │   └── (SearchProvider, StubSearchProvider, MetadataProvider,
-    │       StubMetadataProvider, DebridProvider, others)
+    │       StubMetadataProvider, DebridProvider, others — unchanged;
+    │       no per-episode-id provider call exists, see Session 27 notes)
     ├── ui/
-    │   ├── details/ (Session 26 — new package)
-    │   │   ├── DetailsScreen.kt
-    │   │   └── DetailsViewModel.kt
+    │   ├── details/
+    │   │   ├── DetailsScreen.kt (Session 27: onNavigateToPlayer
+    │   │   │   signature changed to carry mediaId/episodeId/resumeMs)
+    │   │   └── DetailsViewModel.kt (Session 27: onPlayMovie/onPlayEpisode
+    │   │       simplified — emit PlayerNavArgs instead of building a
+    │   │       PlaybackRequest; no longer needs GetActiveProfileUseCase;
+    │   │       had a real missing-closing-brace bug this session, fixed
+    │   │       — see "What Was Done")
     │   ├── home/
-    │   │   ├── HomeScreen.kt (Session 25: rows tappable, unchanged this
-    │   │   │   session — see Session 26 scope decision below)
-    │   │   └── HomeViewModel.kt (Session 25: onItemClick(), one-shot
-    │   │       navigateToPlayer event — unchanged this session)
+    │   │   ├── HomeScreen.kt (Session 27: onNavigateToPlayer signature
+    │   │   │   changed; removed the now-dead resolvingMediaId/isResolving/
+    │   │   │   resumeError UI — see "What Was Done")
+    │   │   └── HomeViewModel.kt (Session 27: onItemClick() simplified to
+    │   │       emit PlayerNavArgs immediately, no longer resolves Media
+    │   │       first; no longer needs GetMediaByIdUseCase)
     │   ├── navigation/
-    │   │   ├── NavGraph.kt (Session 26: added Route.Details with a
-    │   │   │   mediaId nav arg — first route in the graph to carry one)
-    │   │   └── PendingPlaybackHolder.kt
+    │   │   ├── NavGraph.kt (Session 27: Route.Player now carries mediaId/
+    │   │   │   episodeId/resumeMs nav args instead of taking a
+    │   │   │   PendingPlaybackHolder parameter)
+    │   │   └── PlayerNavArgs.kt (Session 27 — new; shared nav-arg payload
+    │   │       type used by both HomeViewModel and DetailsViewModel)
+    │   │   (PendingPlaybackHolder.kt deleted this session)
     │   ├── player/
-    │   │   ├── PlayerScreen.kt
-    │   │   └── PlayerViewModel.kt
+    │   │   ├── PlayerScreen.kt (Session 27: no longer takes
+    │   │   │   pendingPlaybackHolder/onMissingRequest params; renders a
+    │   │   │   new ResolveState layer above the existing CoordinatorState
+    │   │   │   handling)
+    │   │   └── PlayerViewModel.kt (Session 27: takes SavedStateHandle
+    │   │       instead of receiving a ready PlaybackRequest; resolves its
+    │   │       own Media/Episode/active-profile on init — see "What Was
+    │   │       Done" for full reasoning)
     │   ├── search/
-    │   │   ├── SearchScreen.kt (Session 26: all results now tappable,
-    │   │   │   navigate to Details instead of building PlaybackRequest
-    │   │   │   directly)
-    │   │   └── SearchViewModel.kt (Session 26: two doc-comment edits
-    │   │       only — activeProfileId is now unused, see Open TODOs)
+    │   │   ├── SearchScreen.kt (doc-comment-only PendingPlaybackHolder
+    │   │       reference still pending cleanup, see Open TODOs)
+    │   │   └── SearchViewModel.kt (same — doc-comment-only, pending)
     │   └── settings/
     │       ├── SettingsScreen.kt
     │       └── ProfileViewModel.kt
@@ -128,11 +144,13 @@ com.onedebrid.app/
         ├── CreateProfileUseCase.kt
         ├── DeleteProfileUseCase.kt
         ├── EndPlaybackSessionUseCase.kt
+        ├── GetActiveProfileUseCase.kt
         ├── GetContinueWatchingUseCase.kt
-        ├── GetEpisodesUseCase.kt (Session 26 — new, thin wrapper around
-        │   MediaRepository.getEpisodes(), same shape as
+        ├── GetEpisodeByIdUseCase.kt (Session 27 — new, thin wrapper
+        │   around MediaRepository.getEpisodeById(), same shape as
         │   GetMediaByIdUseCase)
-        ├── GetMediaByIdUseCase.kt (Session 25)
+        ├── GetEpisodesUseCase.kt
+        ├── GetMediaByIdUseCase.kt
         ├── RemoveFromContinueWatchingUseCase.kt
         ├── SavePlaybackPositionUseCase.kt
         ├── SearchMediaUseCase.kt
@@ -144,272 +162,335 @@ com.onedebrid.app/
 not a guaranteed exhaustive listing — see the repo itself for ground
 truth on files not mentioned in recent session notes.)
 
-## App Navigation State (as of Session 26)
+## App Navigation State (as of Session 27)
 
 Five routes exist, all wired into a single `NavGraph.kt`:
 
 - **Home** (`Route.Home`, start destination) → real `HomeScreen.kt`.
-  Shows Continue Watching. Rows are tappable to resume playback directly
-  (Session 25) — this flow is **unchanged this session**, deliberately;
-  see Session 26 scope decision below. Top bar has Search and Settings
+  Shows Continue Watching. Rows are tappable to resume playback. As of
+  Session 27, tapping a row navigates **immediately** to Player via
+  `Route.Player.build(mediaId, episodeId, resumeMs)` — no more resolving
+  a `Media` on Home first. Any resolution failure now surfaces on the
+  Player screen itself via its existing error card + retry, not inline on
+  the Home row. This was an explicit, discussed tradeoff (see "What Was
+  Done" below), not an oversight. Top bar has Search and Settings
   actions.
 - **Search** (`Route.Search`) → real `SearchScreen.kt`. Reached via
-  Home's Search button. As of Session 26, tapping any result (movie or
-  TV show) navigates to **Details** with that result's `mediaId`, rather
-  than building a `PlaybackRequest` itself.
-- **Details** (`Route.Details`, new this session) → real
-  `DetailsScreen.kt`. Takes a `mediaId` nav argument (the first route in
-  the graph to carry one — `Route.Details.build(mediaId)`). Reached only
-  from Search. Re-fetches the full `Media` via `GetMediaByIdUseCase`; for
-  `MediaType.TV_SHOW`, also fetches the episode list via the new
-  `GetEpisodesUseCase`. Movie: header + single Play action. TV show:
-  header + episode list grouped by season, tap an episode to play it.
-  Both play actions populate `PendingPlaybackHolder` and navigate to
-  Player, the same handoff Search used to do directly. Back-press
-  returns to Search.
-- **Player** (`Route.Player`) → real `PlayerScreen.kt`. Reads
-  `PlaybackRequest` from `PendingPlaybackHolder`; routes back to Home
-  (with `popUpTo` clearing itself off the stack) if nothing is pending.
-  Reachable from Home (direct resume) and from Details (movie Play /
-  episode tap), both via the same `PendingPlaybackHolder`-then-navigate
-  pattern.
+  Home's Search button. Tapping any result (movie or TV show) navigates
+  to Details with that result's `mediaId`.
+- **Details** (`Route.Details`) → real `DetailsScreen.kt`. Takes a
+  `mediaId` nav argument. Reached only from Search. Re-fetches the full
+  `Media` via `GetMediaByIdUseCase`; for `MediaType.TV_SHOW`, also
+  fetches the episode list via `GetEpisodesUseCase`. Movie: header +
+  single Play action. TV show: header + episode list grouped by season.
+  As of Session 27, both play actions navigate directly to Player via
+  `Route.Player.build(mediaId, episodeId, resumeMs = null)` — no more
+  `PendingPlaybackHolder` handoff. Back-press returns to Search.
+- **Player** (`Route.Player`) → real `PlayerScreen.kt`. As of Session 27,
+  takes `mediaId` (required path segment), `episodeId` (optional,
+  sentinel `"none"`), and `resumeMs` (optional, sentinel `-1L`) as real
+  nav args — see `Route.Player`'s own doc comment in `NavGraph.kt` for
+  why sentinels rather than nullable NavTypes. `PlayerViewModel` resolves
+  `Media`/`Episode`/active profile itself from these on init, then builds
+  its own `PlaybackRequest` and calls `PlaybackCoordinator.play()`.
+  `preferredSource` is always `null` (no stream-candidate picker exists
+  yet — unchanged gap, not a regression). There is no more
+  "nothing pending" case: a `mediaId` is always present, so there is
+  always something to attempt to resolve, even if that resolution can
+  itself fail (shown via `PlayerScreen`'s error card).
+  `PendingPlaybackHolder` no longer exists in this codebase.
 - **Settings** (`Route.Settings`) → real `SettingsScreen.kt`. Reached
   via Home's Settings button. Leaf destination.
 
 No `Route` entries exist beyond these five.
+## Session 27 — What Was Done
 
-## Session 26 — What Was Done
+**Scope agreed with Dia up front:** replace `PendingPlaybackHolder` with
+real nav arguments to Player (Next Steps #1 from Session 26). Confirmed
+this was the priority over the other two candidates (stream-candidate
+picker UI; Continue Watching → Details routing) before starting, per
+standing practice.
 
-**Scope agreed with Dia up front:** build the Episode-picker/Details
-screen (Next Steps #1 from Session 25), reached only from Search.
-Continue Watching's existing direct-to-Player flow was explicitly left
-unchanged to preserve exact `resumePositionMs` resume behavior — routing
-it through Details too would have silently dropped that unless
-`resumePositionMs` were threaded through the nav route as well, which
-Dia opted not to do this session. This was a deliberate scope decision,
-flagged before writing code, not an oversight.
-
-Before writing code, read the actual current `Media.kt`, `Episode.kt`,
-`MediaRepository.kt`, `MediaRepositoryImpl.kt` (`getEpisodes()`
-specifically), `GetMediaByIdUseCase.kt`, `SearchResult.kt`,
-`PlaybackRequest.kt`, `WatchedItem.kt`, `RepositoryResult.kt`,
-`AppError.kt`, `NavGraph.kt`, `PendingPlaybackHolder.kt`, `HomeViewModel.kt`,
-`HomeScreen.kt`, `SearchScreen.kt`, `SearchViewModel.kt`, and
-`strings.xml` per standing practice, before proposing a design.
-
-**Pre-existing bug found and fixed first, before the main feature:**
-`Media.kt` was missing `@Serializable` on the `Media` data class itself
-— see "Important correction" above for the full account, including that
-CI had genuinely gone green on Session 25's code despite this. Verified
-fresh via `raw.githubusercontent.com` (not trusting the tarball alone)
-that this wasn't a stale-pull artifact before treating it as real. Fixed
-with a single-line addition (commit `291cc10`), verified green
-independently via Dia-provided job URL, live file re-confirmed to match.
+**Design discussion before code, as flagged in Session 26's handoff:**
+- `media`/`episode` are derivable from `mediaId`/`episodeId` nav args via
+  existing/new use cases. `resumePositionMs` has no such derivation path
+  (it only ever existed because the calling screen had it in memory at
+  tap time) and `preferredSource` doesn't exist anywhere yet (no picker
+  UI). Decision: full nav args (`mediaId`, `episodeId`, `resumeMs`),
+  `preferredSource` stays `null` — same as every existing caller before
+  this session, not a new gap.
+- No single-episode lookup existed anywhere in the codebase (only
+  `getEpisodes()`, full list per show) — `MetadataProvider.fetchEpisodes`
+  and `MediaCache`'s episode cache are both list-granularity only, and a
+  real per-episode API call would be speculative (TMDB-style APIs fetch
+  per-season, not per-episode-id). Decision, after discussing tradeoffs
+  of three options (fetch-and-filter with no new code; new use case +
+  repository method; pass season/episode numbers as nav args and build a
+  minimal Episode): add `MediaRepository.getEpisodeById()`, implemented
+  via `getEpisodes()` + an in-memory filter. This isolates the "how"
+  behind a stable interface — when real per-episode provider/cache
+  granularity exists later, only `MediaRepositoryImpl` needs to change.
+- Confirmed explicitly with Dia: moving Home's Continue Watching failure
+  surface from an inline row state to Player's existing error card
+  (`AllProvidersUnavailable` is `isRecoverable = true`, so it already gets
+  a Retry button there) was acceptable, given Player's error presentation
+  is equally actionable — just one screen later, with a back-press needed
+  to return to Home on failure instead of staying put.
+- Decided to move `PlayerNavArgs` (originally added to `ui.home`) into
+  `ui.navigation` alongside `Route`, since it's a nav-layer concept shared
+  by two ViewModels' packages, not something that belongs to Home
+  specifically.
+- Confirmed with Dia to fully clear the file list this session (including
+  `MainActivity.kt`, `HomeScreen.kt`, `DetailsScreen.kt`, and deleting
+  `PendingPlaybackHolder.kt` itself — all surfaced mid-session as the true
+  scope became clear from reading actual call sites, not assumed
+  upfront). Comment-only cleanups in `SearchViewModel.kt`/
+  `SearchScreen.kt`/`MediaCache.kt` were explicitly punted to next
+  session due to time — see Open TODOs.
 
 **Files created:**
-- **`usecase/GetEpisodesUseCase.kt`** — thin wrapper around
-  `MediaRepository.getEpisodes()`, same one-line-body shape as
-  `GetMediaByIdUseCase`. Kept as its own Use Case rather than folded into
-  an existing one, per Internal_API_Specification.md's "one Use Case per
-  business operation" rule.
-- **`ui/details/DetailsViewModel.kt`** — `DetailsUiState` is a single
-  data class (not sealed Loading/Success/Error), same reasoning as
-  `HomeUiState`: `media`/`isLoadingMedia`/`mediaError` track the primary
-  load, `episodes`/`isLoadingEpisodes`/`episodesError` track a second,
-  independent load that only applies to `TV_SHOW`. Takes `mediaId` via
-  `SavedStateHandle` (Hilt + Nav Compose auto-populates this from the
-  route arg — `androidx.hilt:hilt-navigation-compose` was already a
-  dependency, no new one needed). `onPlayMovie()`/`onPlayEpisode()`
-  build a `PlaybackRequest` with `resumePositionMs = null` (always plays
-  from the start — this screen has no resume-position context, see scope
-  decision above) and hand off to `PendingPlaybackHolder`, then emit a
-  one-shot `Channel<Unit>`-backed navigation event — same pattern as
-  `HomeViewModel.navigateToPlayer` (Session 25).
-- **`ui/details/DetailsScreen.kt`** — renders `LoadingContent`/
-  `ErrorContent` (reusing the same `isRecoverable`-driven convention as
-  `PlayerScreen`/`SearchScreen`'s own `ErrorContent` — now a third copy
-  of the same pattern, not a new one) or `MediaContent`, which branches
-  on `Media.type`: a Play button for `MOVIE`, or an `EpisodeList` for
-  `TV_SHOW` (grouped by season, sorted season-then-episode-number
-  regardless of the order `getEpisodes()` returns them in).
+- **`usecase/GetEpisodeByIdUseCase.kt`** — thin wrapper around
+  `MediaRepository.getEpisodeById()`, same shape as `GetMediaByIdUseCase`.
+- **`ui/navigation/PlayerNavArgs.kt`** — `data class PlayerNavArgs(mediaId,
+  episodeId, resumeMs)`, shared by `HomeViewModel` and `DetailsViewModel`'s
+  navigation events.
 
 **Files modified:**
-- **`ui/navigation/NavGraph.kt`** — added `Route.Details` (with
-  `build(mediaId)` helper) and its `composable()` registration using
-  `navArgument("mediaId") { type = NavType.StringType }`. Search's
-  destination now takes `onNavigateToDetails` instead of
-  `onNavigateToPlayer`/`pendingPlaybackHolder`. Doc comments for Home,
-  Search, Player, Settings, and the new Details entry all updated.
-- **`ui/search/SearchScreen.kt`** — removed direct `PlaybackRequest`
-  building and the `pendingPlaybackHolder` param entirely; tapping any
-  result now calls `onNavigateToDetails(searchResult.media.id)`.
-  `SearchResultRow` no longer splits on `isPlayable` — every row is
-  `clickable` now, and the "Not yet supported" trailing label is gone
-  (its string resource `search_tv_show_unsupported` is now unused, left
-  in place — see Open TODOs). This closes the "TV_SHOW not yet playable"
-  gap flagged since Session 22.
-- **`ui/search/SearchViewModel.kt`** — two doc-comment-only edits (no
-  logic changes). `SearchUiState.activeProfileId` is now dead state
-  (SearchScreen no longer reads it, since the `PendingPlaybackHolder`
-  handoff moved to `DetailsViewModel`). Discussed with Dia explicitly:
-  **left in place rather than removed**, flagged in Open TODOs to
-  revisit near project end if still unused. Stale doc comments
-  referencing the old reason it existed were corrected to reflect this.
-- **`res/values/strings.xml`** — added `details_back`, `details_play`,
-  `details_no_episodes`, `details_season_header`,
-  `details_episode_fallback_title`. Added an inline XML comment flagging
-  `search_tv_show_unsupported` as unused as of this session (string left
-  in place, not deleted).
+- **`data/repository/MediaRepository.kt`** — added `getEpisodeById()` to
+  the interface, documented as internally implemented via `getEpisodes()`
+  today, subject to change.
+- **`data/repository/MediaRepositoryImpl.kt`** — implemented
+  `getEpisodeById()`. **Real mistake made and fixed this session:** the
+  first paste inserted the new method after the class's actual closing
+  brace instead of before it (a `str_replace` anchor match landed in the
+  wrong place relative to where the class body actually ended), which
+  duplicated and truncated the existing `resolveStream()` method at the
+  literal end of the file. This produced the first CI failure — a full
+  cascade of "not abstract," "override not applicable to top level
+  function," "unresolved reference" errors, all stemming from the same
+  root cause. **Confirmed the original `resolveStream()` body was NOT
+  actually lost** — it was still intact, complete, earlier in the file
+  (this was checked via git commit history, which showed only one commit
+  ever touching this file, then via direct comparison of the two
+  `resolveStream` occurrences in the live pulled file) — before writing
+  the fix, rather than reconstructing the method from memory. Fixed via a
+  full-file overwrite with the duplicate/truncated tail removed and
+  `getEpisodeById()` correctly placed inside the class body. Verified via
+  brace-balance count after the fix.
+- **`ui/navigation/NavGraph.kt`** — `Route.Player` now takes `mediaId`
+  (required), `episodeId` (optional, `"none"` sentinel), `resumeMs`
+  (optional, `-1L` sentinel) nav args with a `build()` helper.
+  `HomeScreen`/`DetailsScreen` composable call sites updated to pass
+  `onNavigateToPlayer` as a 3-arg lambda instead of `() -> Unit`.
+- **`MainActivity.kt`** — no longer field-injects `PendingPlaybackHolder`
+  or passes it to `NavGraph()`.
+- **`ui/player/PlayerViewModel.kt`** — full rewrite. Takes
+  `SavedStateHandle` + `GetMediaByIdUseCase` + `GetEpisodeByIdUseCase` +
+  `GetActiveProfileUseCase` (new dependencies) alongside the existing
+  `PlaybackCoordinator`/`SavePlaybackPositionUseCase`/
+  `EndPlaybackSessionUseCase`. New `resolveAndPlay()` runs once on init:
+  resolves the active profile (`.first()` on the Flow, not an ongoing
+  subscription — this ViewModel only needs it once), then `Media`, then
+  `Episode` if an `episodeId` was passed, builds a `PlaybackRequest`
+  (`preferredSource = null`, unchanged gap), and calls
+  `playbackCoordinator.play()`. New `ResolveState` sealed interface
+  (Resolving/Resolved/Error) tracks this phase, exposed on `PlayerUiState`
+  alongside the pre-existing `CoordinatorState`. Two distinct retry
+  paths: `retryResolve()` (re-runs the whole resolve-and-play flow, for a
+  `ResolveState.Error`) and `retryPlay()` (re-plays with already-resolved
+  data, for a `CoordinatorState.Error`) — kept as separate small methods
+  rather than a shared helper, a deliberate judgment call to avoid
+  over-abstracting two ~15-line blocks.
+- **`ui/player/PlayerScreen.kt`** — full rewrite. No longer takes
+  `pendingPlaybackHolder`/`onMissingRequest` params. Renders
+  `uiState.resolveState` first (Resolving/Error/Resolved), and only once
+  `Resolved` does it look at `coordinatorState` the same way it always
+  did. `ErrorContent` is now shared between both error sources (both wrap
+  an `AppError` and fit the same `isRecoverable` tiers from
+  `UI_UX_Design.md`).
+- **`ui/home/HomeViewModel.kt`** — full rewrite. `onItemClick()` no
+  longer resolves `Media` — reads `mediaId`/`episodeId`/`positionMs`
+  directly off the tapped `WatchedItem` and emits a `PlayerNavArgs`
+  navigation event immediately. No longer depends on
+  `GetMediaByIdUseCase`. `HomeUiState.resolvingMediaId`/`resumeError`
+  removed (dead state — see Known Limitations for the tradeoff this
+  represents).
+- **`ui/home/HomeScreen.kt`** — full rewrite. `onNavigateToPlayer` now
+  takes `(mediaId, episodeId, resumeMs)`. Removed the now-dead
+  `isResolving` spinner and inline `resumeError` text on
+  `ContinueWatchingRow` (nothing produces that state anymore).
+  `R.string.home_resolving_media`/`home_resume_error` are now unused,
+  left in place — see Open TODOs, same "flag don't silently orphan"
+  handling as `search_tv_show_unsupported`.
+- **`ui/details/DetailsScreen.kt`** — `onNavigateToPlayer` signature
+  changed to `(mediaId, episodeId, resumeMs) -> Unit`; `LaunchedEffect`
+  body updated to pass all three through from the collected
+  `PlayerNavArgs`.
+- **`ui/details/DetailsViewModel.kt`** — `onPlayMovie()`/`onPlayEpisode()`
+  simplified to emit `PlayerNavArgs` directly instead of building a
+  `PlaybackRequest` and populating `PendingPlaybackHolder`. No longer
+  depends on `GetActiveProfileUseCase` (Player resolves the active
+  profile itself now). **Real mistake made and fixed this session:** the
+  live file was missing its final closing `}` for the class — confirmed
+  via a top-level-brace grep (zero closing braces found for a class
+  opened at line 89) before writing the one-line fix. This was the second
+  distinct compile error in the same failed CI run, alongside the
+  `MediaRepositoryImpl.kt` issue above.
+- **`ui/navigation/PendingPlaybackHolder.kt`** — deleted (Dia deleted it
+  directly in Spck Editor, confirmed gone on the next repo pull).
 
-**Important, expected, and deliberately-not-worked-around limitation:**
-same as Session 25's Continue Watching gap — `MetadataProvider` is still
-`StubMetadataProvider`, so `GetEpisodesUseCase` will surface
-`AppError.AllProvidersUnavailable` in the episode list at runtime today
-unless that `mediaId` was already cache-hit. `DetailsScreen` renders
-this correctly via its own `ErrorContent`/retry path. Not a new gap —
-the same one already documented for Continue Watching — just now visible
-in a second place. Will resolve automatically once a real
-`MetadataProvider` exists, no revisit needed here.
-
-All 7 touched files (3 new, 4 edited) were independently re-pulled from
-`raw.githubusercontent.com` and diffed against what was delivered
-(byte-for-byte identical aside from trailing-newline differences, which
-are cosmetic) before this session was treated as closed.
+**Build verification, in detail:** first CI attempt after this session's
+pastes failed for a reason initially suspected (and briefly assumed) to
+be GitHub Actions cache-service infrastructure noise — the visible
+annotations were all `"Our services aren't available right now"`
+cache-restore warnings. This was **not verified further before Dia
+retried the workflow**, which surfaced the actual compiler output (the
+two real errors above). This is a process note worth remembering: an
+infra-looking annotation set is not sufficient on its own to rule out a
+real compile error underneath it — the actual task-level log output is
+needed, and when the Actions API is rate-limited, a workflow retry (not
+just re-reading the same failed run) may be the fastest way to get it.
+Both real errors were fixed, re-pushed, and the retried run
+(`runs/32750760290/job/97506903198`) came back green. Post-fix, all 12
+files touched this session were re-pulled fresh and brace-balance
+checked; `PendingPlaybackHolder.kt`'s absence and `PlayerNavArgs.kt`'s
+presence were confirmed directly.
 
 ## Known, Deliberate Limitations (documented in code, not silently
 worked around)
 
-- **SearchScreen playback always uses Smart Defaults**
-  (`preferredSource = null`, no stream-candidate picker) — from
-  Session 22, still true. Now also true of Details' play actions, for
-  the same reason (no picker UI exists yet).
-- **Details' play actions always start from position 0** — no
-  resume-position context reaches this screen; only Continue Watching's
-  direct-to-Player flow (Session 25) carries `resumePositionMs`. A
-  future enhancement could have Details check Continue Watching for the
-  given `mediaId` and offer resume-from-here, but this was explicitly
-  scoped out of Session 26 (see "What Was Done" above).
-- **HomeScreen Continue Watching resolve failures are not row-scoped in
-  state** (`resumeError` is a single most-recent-failure field, not a
-  per-mediaId map) — from Session 25, unchanged. Acceptable given only
-  one row can resolve at a time.
+- **SearchScreen and Details' play actions always use Smart Defaults**
+  (`preferredSource = null`, no stream-candidate picker) — unchanged,
+  now also explicitly true of Home's and Player's own request-building,
+  for the same reason (no picker UI exists yet).
+- **Home and Details' play actions always start from position 0**
+  (`resumeMs = null`) unless the request came from an actual
+  `WatchedItem` (Continue Watching) — unchanged from Session 26.
+- **Home's Continue Watching failure surface moved from an inline row
+  state to Player's error screen** (Session 27) — a deliberate, discussed
+  tradeoff, not a regression in capability. Tapping a row now always
+  navigates instantly; if resolution fails, the user sees Player's
+  Resolving state briefly, then its error card with Retry, and must
+  press back to return to Home rather than staying there the whole time.
 - **HomeScreen rows do not proactively resolve/display real
-  titles/artwork** — from Session 25, unchanged. Resolution only happens
-  on tap.
+  titles/artwork** — unchanged. Resolution only happens once Player is
+  reached.
+- **`getEpisodeById()` has no dedicated per-episode cache entry or
+  provider call** (Session 27) — implemented via the existing
+  full-list `getEpisodes()` plus a filter, meaning a single-episode
+  Player launch fetches the same data Details would for the whole show.
+  Documented as an internal detail, not a public contract change, in
+  `MediaRepository.kt`'s doc comment.
 - **SettingsScreen preference edits write to Room on every single
-  toggle/dropdown/keystroke** (no debounce, no explicit Save step) —
-  from earlier sessions, unchanged. Flagged as a possible follow-up only
-  if it feels laggy on-device.
+  toggle/dropdown/keystroke** — unchanged, low priority.
 - **SettingsScreen blank-name and delete-active-profile validation
   errors both surface as a generic error message** — `AppError` has no
   `ValidationError` case yet. See Open TODOs.
+
 ## Carried-Forward Lessons
 
-- **Verify a stale-seeming discrepancy against the actual repo before
-  assuming the doc is right** (Session 26) — this session's sprint doc
-  claimed `Media.kt` had `@Serializable`; a fresh read showed it didn't.
-  Confirmed via an independent `raw.githubusercontent.com` pull (not
-  just the tarball) that this wasn't a stale-pull artifact, and via the
-  actual CI job log (not just green/red status) that the prior session's
-  build had genuinely succeeded anyway, before concluding it was a real
-  gap worth fixing rather than a misread. Memory/handoff notes can be
-  wrong; the live repo and live CI logs are the actual source of truth.
+- **An infra-looking CI annotation set (e.g. Gradle cache-service
+  warnings) does not rule out a real compile error underneath it** —
+  confirmed the hard way this session. Get the actual task-level compiler
+  output before concluding a failure is "just infrastructure noise,"
+  especially if the only evidence checked so far is the Annotations
+  summary rather than the full job log.
+- **Before writing a fix for apparently-lost code, check whether it's
+  actually lost** (git history, or a duplicate/earlier occurrence in the
+  same file) rather than reconstructing it from memory — reconstructing
+  from memory is exactly the kind of error that caused problems earlier
+  in this same session (`str_replace` anchor landing in an unintended
+  location). Confirmed this session: the "lost" `resolveStream()` body
+  was fully intact elsewhere in the file.
+- **A `str_replace` or full-file insertion needs the surrounding class
+  structure re-verified, not just the immediate anchor text** — matching
+  a signature line is not sufcient to guarantee the insertion lands
+  inside the intended scope if the file's closing brace could plausibly
+  be adjacent to that anchor.
+- **A brace-balance grep (`grep -c "^}"` for top-level, or an open/close
+  count) is a cheap, fast sanity check worth running on any file after a
+  structural edit**, before pushing and relying on CI alone to catch it.
+- **Removing a resolve-before-navigate pattern from a ViewModel usually
+  also means removing UI-layer state for it** (Session 27,
+  `HomeViewModel`/`HomeScreen`) — don't leave a spinner/error path
+  rendering dead state after the producing logic is gone.
+- **Simplifying a caller's responsibility (e.g. no longer needing to
+  resolve `Media` before navigating) often removes a dependency
+  entirely**, not just a code path — `HomeViewModel` no longer needs
+  `GetMediaByIdUseCase`; `DetailsViewModel` no longer needs
+  `GetActiveProfileUseCase`. Worth checking imports/constructor params
+  for now-unused dependencies after this kind of simplification, not just
+  the method bodies.
 - **A one-shot ViewModel → UI event needs a `Channel`, not a second
-  `StateFlow`** (Session 25, reused as-is Session 26 for
-  `DetailsViewModel.navigateToPlayer`) — `Channel<Unit>(Channel.BUFFERED)`
-  + `receiveAsFlow()`, collected via `LaunchedEffect` + `collectLatest`
-  in the composable.
+  `StateFlow`** — `Channel<T>(Channel.BUFFERED)` + `receiveAsFlow()`,
+  collected via `LaunchedEffect` + `collectLatest` in the composable.
 - **Nav args need explicit `NavType` registration** — `composable(route,
   arguments = listOf(navArgument("x") { type = NavType.StringType }))`;
   `SavedStateHandle["x"]` in the ViewModel picks it up automatically via
-  `hilt-navigation-compose` (already a dependency, confirmed present
-  before assuming it would just work).
-- **A generic, already-registered-but-unused Room table is worth
-  grepping for before assuming a new one is needed** (Session 25,
-  `CacheEntryEntity`/`CacheEntryDao`).
-- **A repository method gaining a new constructor dependency doesn't
-  need a DI module change if the new dependency is itself
-  `@Singleton @Inject constructor` and the repository's binding is a
-  plain `@Binds` interface binding** (Session 25) — Hilt resolves the
-  chain automatically.
+  `hilt-navigation-compose`.
+- **Nav Compose has no nullable-String/Long NavType that round-trips
+  cleanly through the simple `navArgument {}` builder** — sentinel values
+  (`"none"` for String, `-1L` for Long) are the workaround, documented at
+  both the encoding site (`Route.build()`) and decoding site
+  (`SavedStateHandle` reads in the ViewModel).
+- **Jetpack Navigation Compose cannot pass domain objects as nav args** —
+  primitives only. As of Session 27, this is no longer worked around via
+  an in-memory singleton (`PendingPlaybackHolder`, deleted this session)
+  for the Player route — all callers now resolve from primitive nav args
+  instead.
 - **When a shared-IP GitHub Actions API rate limit blocks CI
   verification, ask for the direct run/job URL and `web_fetch` it
-  instead** (Session 25, confirmed again Session 26) — the job page's
-  Annotations section is sufficient to distinguish real build failures
-  from infrastructure noise without needing raw log access.
-- **Grep build.gradle.kts / libs.versions.toml before importing anything
-  from a library not yet used elsewhere in the codebase** — confirmed
-  again Session 26 for `hilt-navigation-compose` and `NavType`/
-  `navArgument` (both already present via `androidx-navigation-compose`
-  and `androidx-hilt-navigation-compose`).
+  instead** — confirmed again this session.
+- **Grep `build.gradle.kts` / `libs.versions.toml` before importing
+  anything from a library not yet used elsewhere in the codebase.**
 - **Don't declare a session or a file "done" without an actual CI
-  result** — checked via the direct run/job URL fetch, not inferred from
-  "build clean" or "pushed" alone.
+  result** — confirmed hard this session: the first "looks probably
+  fine" read of the failure would have been wrong.
 - **`@Composable` functions are only callable from other `@Composable`
   functions** — not from `LaunchedEffect`, coroutine scopes, or other
-  suspend contexts. (Session 23.)
+  suspend contexts.
 - **Flow collection:** always `flow.onEach{}.launchIn(viewModelScope)`,
-  never `viewModelScope.launch { flow.collect() }`. For one-shot events
-  collected in a composable, use `LaunchedEffect` + `collectLatest`
-  instead.
+  never `viewModelScope.launch { flow.collect() }`.
 - **`MutableStateFlow.update{}` does not resolve in this build
-  environment** — use direct `_flow.value = _flow.value?.copy(...)`
+  environment** — use direct `_flow.value = _flow.value.copy(...)`
   assignment instead.
 - **`PlaybackState` naming collision:** `CoordinatorState` (sealed
   interface, `PlaybackCoordinator.kt`) vs `PlayerLifecycleState` (enum,
-  `SessionState.kt`) — resolved via import aliases. Reuse these exact
-  names if a file needs both types again.
-- **Jetpack Navigation Compose cannot pass domain objects as nav args**
-  — primitives only (confirmed again Session 26: `mediaId: String` is
-  the first nav arg used in this project). `PendingPlaybackHolder`
-  singleton remains the workaround for passing a full `PlaybackRequest`;
-  still does not survive process death.
+  `SessionState.kt`) — resolved via import aliases, reused again this
+  session in `PlayerViewModel.kt`/`PlayerScreen.kt`.
 - **ExoPlayer instance belongs in the Compose screen, not the
   ViewModel** (`PlayerScreen.kt`'s `DisposableEffect(Unit).onDispose`
-  pattern).
-- **When a paste truncates at a consistent point across retries,
-  that's a signal to chunk the paste, not retry it unchanged.**
-  (Session 23.) All files delivered in Session 26 were well under the
-  ~450-500 line risk zone (largest was `DetailsScreen.kt` at ~300
-  lines), so no chunking was needed for source files this session.
+  pattern) — unchanged, confirmed still correct after this session's
+  `PlayerScreen.kt` rewrite.
+- **When a paste truncates at a consistent point across retries, that's
+  a signal to chunk the paste, not retry it unchanged.**
 - **currentsprint.md on GitHub is the authoritative completion record**
   — project file copies / prior-session memory summaries are a
-  convenience cache only and can be stale. Confirmed the hard way this
-  session (see "Important correction" above).
+  convenience cache only and can be stale.
 
 ## Next Steps, In Order
 
-1. **PendingPlaybackHolder replacement / real mediaId nav args to
-   Player.** Not started — deferred stretch goal since Session 25.
-   Session 26 added `mediaId` nav args for `Route.Details`, which proves
-   the pattern works end-to-end, but `Route.Player` still reads from
-   `PendingPlaybackHolder`, not its own nav arg. Doing this for Player
-   too would mean passing `mediaId` (+ optional episode identifiers) as
-   real nav args and having `PlayerViewModel` do its own
-   `GetMediaByIdUseCase` resolution on entry. Needs design discussion
-   before code — in particular how `resumePositionMs` and
-   `preferredSource` would travel if `PlaybackRequest` is no longer
-   built by the calling screen, and how Details' current
-   `PendingPlaybackHolder`-based handoff would need to change too.
-2. **Stream-candidate picker UI.** Not started. Needed to lift both
-   SearchScreen's and Details' Smart-Defaults-only limitation.
-3. **Continue Watching → Details routing with resumePositionMs.** Not
-   started, explicitly deferred this session (see "What Was Done"
-   above). Would mean threading an optional `resumePositionMs` through
-   `Route.Details`'s nav args so Details' play action can resume exactly
-   rather than restarting from 0, if Dia decides Continue Watching
-   should route through Details after all.
+1. **Stream-candidate picker UI.** Not started. Needed to lift the
+   Smart-Defaults-only limitation from Home, Search/Details, and Player's
+   own request-building (`preferredSource` is `null` everywhere today).
+2. **Continue Watching → Details routing with resumePositionMs.** Not
+   started. Would mean deciding whether Continue Watching should route
+   through Details after all now that Player resolves from nav args
+   cleanly either way — worth revisiting now that the nav-arg pattern is
+   proven end-to-end for Player specifically, not just Details.
+3. **Comment-only `PendingPlaybackHolder` cleanup** in
+   `SearchViewModel.kt`, `SearchScreen.kt`, `MediaCache.kt` — punted from
+   Session 27 due to time. No functional impact (stale prose only), but
+   should be cleared soon so nothing points at a deleted file.
 4. **`AppError.ValidationError` case.** Would let profile-related
-   validation errors surface distinct user-facing messages instead of a
-   generic `LocalStorageError` message. Low urgency.
+   validation errors, and now also `getEpisodeById()`'s not-found case,
+   surface distinct user-facing messages instead of reusing
+   `LocalStorageError`/`Unknown`. Low urgency, growing slightly with each
+   session that reuses `Unknown` as a catch-all.
 5. **Completion-percentage / markAsCompleted wiring.** Not started.
-   `durationMs` is correctly persisted but nothing calculates completion
-   percentage or calls `PlaybackRepository.markAsCompleted()`
-   automatically at a threshold (~90%).
 6. **SettingsScreen preference-write debounce** — only if it turns out
    to feel laggy on-device; not confirmed, just flagged.
-7. **HomeScreen proactive title/artwork display** — only if a priority;
-   see Known Limitations.
+7. **HomeScreen proactive title/artwork display** — only if a priority.
 
 ## Open TODOs (carried forward, unchanged unless noted)
 
@@ -418,53 +499,37 @@ worked around)
   filters; revisit if SearchFilters gets promoted to a domain model
 - AppError has no ValidationError case; CreateProfileUseCase and
   UpdateProfileUseCase use LocalStorageError(IllegalArgumentException)
-  for blank name validation — semantically incorrect; revisit when the
-  error model gets a review pass. Also affects DeleteProfileUseCase's
-  active-profile rejection. See Next Steps #4.
+  for blank name validation. See Next Steps #4 — now also relevant to
+  getEpisodeById()'s AppError.Unknown not-found case (Session 27).
 - StartPlaybackUseCase uses a fully qualified AppError reference inline;
   tidy to a top-level import if preferred
 - HomeViewModel.removeItem() has no failure feedback path — deliberately
-  deferred (Session 16)
-- HomeViewModel.kt has a fully-qualified kotlinx.coroutines.Job
-  reference inline instead of a top-level import (Session 16)
+  deferred
 - SearchScreen.kt uses fully-qualified
   `androidx.compose.foundation.text.KeyboardActions`/`KeyboardOptions`
-  inline rather than top-level imports (possible import-name collision,
-  unverified against the exact Compose BOM version). Revisit once
-  confirmed safe.
+  inline rather than top-level imports. Revisit once confirmed safe.
 - `DropdownField<T>` in SettingsScreen.kt is a `TextButton` +
   `DropdownMenu`, not Material 3's `ExposedDropdownMenuBox`. Functional;
   revisit only if visual polish becomes a priority.
 - No language list/picker exists — free-text BCP-47 code entry fields
-  only. Revisit if a proper picker becomes worth building.
+  only.
 - `PlaybackRepositoryImpl`'s `markAsCompleted()` block has inconsistent
   indentation — cosmetic only.
 - `ExoPlayer.duration` can report `C.TIME_UNSET` before a stream has
-  buffered enough to know its length; stored as-is currently. Needs
-  handling once Next Steps #5 is scoped.
-- `MediaCache`'s 7-day TTL is a starting assumption (Session 25), not
-  derived from a specific requirement. Revisit if staleness complaints
-  arise once real metadata providers exist.
-- `HomeUiState.resumeError` is not scoped per-row (Session 25) — see
-  Known Limitations.
-- **NEW (Session 26):** `SearchUiState.activeProfileId` is dead state —
-  SearchScreen no longer reads it. Left in place per Dia's explicit
-  Session 26 call; revisit near project end if still unused.
-- **NEW (Session 26):** `search_tv_show_unsupported` string resource is
-  now unused (its UI usage was removed when SearchResultRow's
-  isPlayable split was deleted). Left in place with an inline XML
-  comment flagging it; low-priority cleanup.
-- **NEW (Session 26):** `Media.id` for a `SearchResult` tapped in
-  Search vs. the `Media` re-fetched by `DetailsViewModel` via
-  `GetMediaByIdUseCase` are assumed to always resolve to the same
-  `mediaId` round-trip cleanly as a String. Not verified with an
-  automated test (none exist in this repo) — worth keeping in mind if
-  odd "media not found" reports ever surface from Details specifically.
-
-At the end of the next session, update currentsprint.md (full file, in
-a code block, chunked into sequential pastes if it's likely to exceed
-~450-500 lines) and verify it directly against
-raw.githubusercontent.com/diaviloai/Onedebrid/main/currentsprint.md
-before treating the session as closed — and do not treat any session as
-closed without an actual green CI result for whatever was last pushed,
-verified via the direct run/job URL if the Actions API is rate-limited.
+  buffered enough to know its length; stored as-is currently.
+- `MediaCache`'s 7-day TTL is a starting assumption, not derived from a
+  specific requirement.
+- **NEW (Session 27):** `SearchViewModel.kt`, `SearchScreen.kt`,
+  `MediaCache.kt` all still have doc-comment-only references to
+  `PendingPlaybackHolder`, which was deleted this session. No functional
+  impact; punted to next session for cleanup (see Next Steps #3).
+- **NEW (Session 27):** `R.string.home_resolving_media` and
+  `R.string.home_resume_error` are now unused (the UI states that read
+  them were removed when Home stopped resolving Media before
+  navigating). Left in place, same handling as `search_tv_show_unsupported`.
+- **NEW (Session 27):** `getEpisodeById()`'s not-found path reuses
+  `AppError.Unknown` — not semantically ideal (see Next Steps #4), but
+  consistent with `Unknown` already being this codebase's catch-all.
+- **CARRIED (Session 26):** `SearchUiState.activeProfileId` is dead
+  state. Left in place per Dia's explicit call; revisit near project end
+  if still un
