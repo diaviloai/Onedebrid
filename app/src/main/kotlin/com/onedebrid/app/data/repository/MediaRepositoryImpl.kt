@@ -78,6 +78,37 @@ class MediaRepositoryImpl @Inject constructor(
             }
         }
 
+    /**
+     * Implemented via getEpisodes() (cache-first) plus an in-memory filter
+     * to the matching episodeId. See the doc comment on this method in
+     * MediaRepository.kt for why there is no dedicated per-episode cache
+     * entry or provider call as of Session 27.
+     *
+     * Session 27 fix note: this method was originally pasted in the wrong
+     * place — after the class's closing brace instead of before it — which
+     * broke the build (see currentsprint.md Session 27 notes). This is the
+     * corrected placement, inside the class body, before resolveStream().
+     */
+    override suspend fun getEpisodeById(
+        mediaId: String,
+        episodeId: String
+    ): RepositoryResult<Episode> =
+        when (val episodesResult = getEpisodes(mediaId)) {
+            is RepositoryResult.Success -> {
+                val match = episodesResult.data.find { it.id == episodeId }
+                if (match != null) {
+                    RepositoryResult.Success(match)
+                } else {
+                    RepositoryResult.Failure(
+                        AppError.Unknown(
+                            message = "Episode not found: $episodeId (mediaId: $mediaId)"
+                        )
+                    )
+                }
+            }
+            is RepositoryResult.Failure -> episodesResult
+        }
+
     override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
         withContext(dispatchers.io) {
             val hash = candidate.hash
@@ -127,30 +158,4 @@ class MediaRepositoryImpl @Inject constructor(
             message = "Parsing error: ${cause.message}"
         )
     }
-}/**
-     * Implemented via getEpisodes() (cache-first) plus an in-memory filter
-     * to the matching episodeId. See the doc comment on this method in
-     * MediaRepository.kt for why there is no dedicated per-episode cache
-     * entry or provider call as of Session 27.
-     */
-    override suspend fun getEpisodeById(
-        mediaId: String,
-        episodeId: String
-    ): RepositoryResult<Episode> =
-        when (val episodesResult = getEpisodes(mediaId)) {
-            is RepositoryResult.Success -> {
-                val match = episodesResult.data.find { it.id == episodeId }
-                if (match != null) {
-                    RepositoryResult.Success(match)
-                } else {
-                    RepositoryResult.Failure(
-                        AppError.Unknown(
-                            message = "Episode not found: $episodeId (mediaId: $mediaId)"
-                        )
-                    )
-                }
-            }
-            is RepositoryResult.Failure -> episodesResult
-        }
-
-    override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
+}
