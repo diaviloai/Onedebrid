@@ -45,12 +45,13 @@ import com.onedebrid.app.domain.model.SearchResult
  *
  * As of Session 26, tapping ANY result (movie or TV show) navigates to
  * Details via [onNavigateToDetails], passing only the result's mediaId —
- * this screen no longer builds a PlaybackRequest or touches
- * PendingPlaybackHolder itself. DetailsViewModel re-fetches the full Media
- * via GetMediaByIdUseCase and, for TV shows, the episode list via
- * GetEpisodesUseCase, then handles the PendingPlaybackHolder handoff to
- * Player from there. See DetailsScreen.kt/DetailsViewModel.kt for that
- * flow and NavGraph.kt for the route wiring.
+ * this screen no longer builds a PlaybackRequest itself. DetailsViewModel
+ * re-fetches the full Media via GetMediaByIdUseCase and, for TV shows, the
+ * episode list via GetEpisodesUseCase, then (as of Session 27) hands off
+ * to Player by emitting a PlayerNavArgs and navigating with real nav args
+ * (mediaId/episodeId/resumeMs) rather than an in-memory singleton. See
+ * DetailsScreen.kt/DetailsViewModel.kt for that flow and NavGraph.kt for
+ * the route wiring.
  *
  * This closes the "TV_SHOW not yet playable" gap this screen had prior to
  * Session 26 (PlaybackRequest requires an Episode for TV_SHOW content,

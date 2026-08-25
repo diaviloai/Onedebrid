@@ -52,11 +52,12 @@ class SearchViewModel @Inject constructor(
                 _activeProfile.value = profile
                 // Mirror the active profile's id into UiState. As of
                 // Session 26 this is no longer read by SearchScreen itself
-                // (PendingPlaybackHolder handoff moved to DetailsViewModel
-                // once tapping a result navigates to Details instead of
-                // playing directly) — left in place per Dia's Session 26
-                // call rather than removed, flagged in currentsprint.md's
-                // Open TODOs to revisit near project end if still unused.
+                // (tapping a result navigates to Details instead of playing
+                // directly, and Details/Player resolve the active profile
+                // themselves via PlayerNavArgs + their own ViewModels) —
+                // left in place per Dia's Session 26 call rather than
+                // removed, flagged in currentsprint.md's Open TODOs to
+                // revisit near project end if still unused.
                 _uiState.value = _uiState.value.copy(activeProfileId = profile.id)
                 // When the profile changes, start observing its history.
                 // History observation is started here rather than once at init

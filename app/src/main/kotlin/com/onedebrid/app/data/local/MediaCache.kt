@@ -15,10 +15,10 @@ import javax.inject.Singleton
  *
  * This is the "Media cache/lookup layer" referenced throughout
  * currentsprint.md's Next Steps and several files' doc comments
- * (PendingPlaybackHolder.kt, HomeScreen.kt, NavGraph.kt). Those comments
- * predate this class and describe the gap it fills; they are not yet
- * updated to reflect that the gap is closed, since MediaRepositoryImpl is
- * the caller that actually wires this in.
+ * (HomeScreen.kt, NavGraph.kt). Those comments predate this class and
+ * describe the gap it fills; they are not yet updated to reflect that the
+ * gap is closed, since MediaRepositoryImpl is the caller that actually
+ * wires this in.
  *
  * Key convention follows CacheEntryEntity's own doc comment exactly:
  *   cacheType "metadata", key "metadata:<mediaId>" for a single Media
