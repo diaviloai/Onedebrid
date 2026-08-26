@@ -310,7 +310,8 @@ green via CI (`runs/32855111601`) before moving on to the fallback work.
 **Selection rule is deliberately minimal, not a real ranking
 algorithm:** "first candidate with a hash" — no quality-preference
 weighting, no cached-status prioritization. This was a discussed,
-agreed-on choice (see Design Discussion below) given there is no real
+agreed-on choice (see the design discussion above, under "Scope
+confirmed with Dia up front") given there is no real
 search data or profile-preference signal reaching this layer yet to
 rank against meaningfully; inventing a scoring heuristic now would be
 guessing at criteria rather than implementing anything real. The
