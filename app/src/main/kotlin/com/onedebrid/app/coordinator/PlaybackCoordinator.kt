@@ -51,7 +51,7 @@ class PlaybackCoordinator @Inject constructor(
         activeJob = scope.launch(dispatchers.default) {
             _state.value = PlaybackState.Resolving
 
-            when (val result = resolvePlaybackUseCase(request)) {
+            when (val result = resolvePlaybackUseCase(request, profileId)) {
                 is RepositoryResult.Success -> {
                     val source = result.data
 
