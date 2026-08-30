@@ -2,6 +2,7 @@ package com.onedebrid.app.di
 
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -83,5 +84,3 @@ object NetworkModule {
         @TorrentioRetrofit retrofit: Retrofit
     ): TorrentioApi = retrofit.create(TorrentioApi::class.java)
 }
-
-private fun String.toMediaType() = okhttp3.MediaType.Companion.get(this)
