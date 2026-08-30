@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.onedebrid.app.domain.model.SearchResult
+import com.onedebrid.app.provider.search.SearchFilters
 import com.onedebrid.app.provider.search.SearchProvider
 
 /**
@@ -138,6 +139,29 @@ class MediaRepositoryImpl @Inject constructor(
     ): RepositoryResult<List<SearchResult>> =
         withContext(dispatchers.io) {
             searchProvider.search(query).toRepositoryResult()
+        }
+
+    /**
+     * Session 29: pass-through to SearchProvider.searchByMedia(). See
+     * MediaRepository.kt's doc comment on this method for why it exists
+     * alongside search() rather than sharing its implementation.
+     *
+     * episode?.let carries season/episode into SearchFilters — this is
+     * the one translation this method is responsible for, since
+     * SearchProvider's contract takes filters rather than an Episode
+     * directly (Episode is a domain model with more fields than a
+     * provider needs; SearchFilters is intentionally minimal).
+     */
+    override suspend fun searchStreamsByMedia(
+        media: Media,
+        episode: Episode?
+    ): RepositoryResult<List<StreamCandidate>> =
+        withContext(dispatchers.io) {
+            val filters = SearchFilters(
+                season = episode?.seasonNumber,
+                episode = episode?.episodeNumber
+            )
+            searchProvider.searchByMedia(media, filters).toRepositoryResult()
         }
 
     // --- ProviderResult → RepositoryResult translation ---

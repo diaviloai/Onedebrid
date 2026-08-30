@@ -5,7 +5,7 @@ import com.onedebrid.app.provider.debrid.StubDebridProvider
 import com.onedebrid.app.provider.metadata.MetadataProvider
 import com.onedebrid.app.provider.metadata.StubMetadataProvider
 import com.onedebrid.app.provider.search.SearchProvider
-import com.onedebrid.app.provider.search.StubSearchProvider
+import com.onedebrid.app.provider.search.torrentio.TorrentioSearchProvider
 import com.onedebrid.app.provider.subtitle.StubSubtitleProvider
 import com.onedebrid.app.provider.subtitle.SubtitleProvider
 import dagger.Binds
@@ -20,9 +20,9 @@ abstract class ProviderModule {
 
     @Binds
     @Singleton
-    abstract fun bindDebridProvider(
-        stub: StubDebridProvider
-    ): DebridProvider
+    abstract fun bindSearchProvider(
+        torrentio: TorrentioSearchProvider
+    ): SearchProvider
 
     @Binds
     @Singleton

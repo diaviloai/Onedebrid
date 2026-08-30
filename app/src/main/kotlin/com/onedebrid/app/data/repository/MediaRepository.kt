@@ -96,4 +96,29 @@ interface MediaRepository {
      * which search providers to query.
      */
     suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>>
+
+    /**
+     * Find stream candidates for a specific, already-known Media —
+     * as opposed to [search], which discovers titles from free text.
+     *
+     * Added in Session 29 alongside TorrentioSearchProvider.
+     * SearchProvider.searchByMedia()'s doc comment has the full reasoning
+     * for why this is a separate method from [search] rather than a
+     * shared one — in short, ID-based lookup (what Torrentio-style
+     * backends actually support) and free-text discovery are genuinely
+     * different operations, not two ways of doing the same thing.
+     *
+     * [episode] should be provided for TV_SHOW media — it supplies the
+     * season/episode filters providers need to look up a specific
+     * episode's streams. Ignored for MOVIE media.
+     *
+     * This is the method ResolvePlaybackUseCase's Smart Defaults fallback
+     * uses (Session 29) — it already has a resolved Media (and Episode,
+     * if applicable) in hand from the PlaybackRequest, so there is
+     * nothing to discover, only candidates to look up.
+     */
+    suspend fun searchStreamsByMedia(
+        media: Media,
+        episode: Episode? = null
+    ): RepositoryResult<List<StreamCandidate>>
 }
