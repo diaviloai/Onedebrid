@@ -20,9 +20,9 @@ abstract class ProviderModule {
 
     @Binds
     @Singleton
-    abstract fun bindSearchProvider(
-        torrentio: TorrentioSearchProvider
-    ): SearchProvider
+    abstract fun bindDebridProvider(
+        stub: StubDebridProvider
+    ): DebridProvider
 
     @Binds
     @Singleton
@@ -33,7 +33,7 @@ abstract class ProviderModule {
     @Binds
     @Singleton
     abstract fun bindSearchProvider(
-        stub: StubSearchProvider
+        torrentio: TorrentioSearchProvider
     ): SearchProvider
 
     @Binds
