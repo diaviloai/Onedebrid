@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-- name: Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Write local.properties
@@ -31,7 +31,7 @@ jobs:
       - name: Regenerate Gradle wrapper
         run: gradle wrapper --gradle-version=8.13
 
-      - - name: Grant execute permission for gradlew
+      - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
       - name: Build debug APK
