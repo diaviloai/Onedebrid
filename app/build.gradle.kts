@@ -1,3 +1,22 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(FileInputStream(localPropertiesFile))
+    }
+}
+
+val tmdbReadAccessToken: String = localProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
+    ?: throw GradleException(
+        "Missing TMDB_READ_ACCESS_TOKEN in local.properties. " +
+        "Add a line like: TMDB_READ_ACCESS_TOKEN=eyJ... (your TMDB v4 Read Access Token, " +
+        "NOT the shorter v3 API key). Get it from https://www.themoviedb.org/settings/api. " +
+        "In CI, this is written into local.properties from a GitHub Actions secret " +
+        "(see .github/workflows/build.yml) — it is never committed to the repo."
+    )
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,6 +38,8 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "TMDB_READ_ACCESS_TOKEN", "\"$tmdbReadAccessToken\"")
     }
 
     buildTypes {
@@ -50,6 +71,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     // Room schema export for migration testing

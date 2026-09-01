@@ -60,6 +60,33 @@ interface MetadataProvider {
         sourceType: ExternalIdType,
         targetType: ExternalIdType
     ): ProviderResult<String?>
+
+    /**
+     * Searches for Media by free-text title.
+     *
+     * Added when TmdbMetadataProvider was built (real MetadataProvider
+     * session). This lives here rather than on SearchProvider because it
+     * is fundamentally a title-catalog lookup — the same kind of
+     * operation as fetchMediaDetails(), just keyed by text instead of an
+     * ID — not a stream/torrent discovery operation. SearchProvider's own
+     * search() method exists for stream discovery by title, which most
+     * real search backends (e.g. Torrentio, see
+     * TorrentioSearchProvider's doc comment) cannot actually do; TMDB's
+     * search/multi endpoint is a genuinely different capability that a
+     * metadata catalog provider is positioned to offer.
+     *
+     * Returned Media objects come from this provider's search results
+     * only (e.g. TMDB's /search/multi) — they are not yet enriched with
+     * everything fetchMediaDetails() would provide (e.g. imdbId is
+     * always null here; TMDB's search endpoints cannot return it — see
+     * TmdbMetadataProvider's doc comment). Callers needing imdbId (e.g.
+     * before calling SearchProvider.searchByMedia()) must call
+     * fetchMediaDetails() separately once a specific Media is chosen.
+     *
+     * Returns an empty list (not a failure) for a query with zero
+     * matches — a real "nothing found" is not an error condition.
+     */
+    suspend fun searchMedia(query: String): ProviderResult<List<Media>>
 }
 
 /**

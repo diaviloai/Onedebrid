@@ -53,7 +53,7 @@ class MediaRepositoryImpl @Inject constructor(
             }
             metadataProvider.fetchMediaDetails(
                 externalId = mediaId,
-                idType = ExternalIdType.IMDB
+                idType = ExternalIdType.TMDB
             ).toRepositoryResult().also { result ->
                 if (result is RepositoryResult.Success) {
                     mediaCache.putMedia(result.data)
@@ -71,7 +71,7 @@ class MediaRepositoryImpl @Inject constructor(
             }
             metadataProvider.fetchEpisodes(
                 externalId = mediaId,
-                idType = ExternalIdType.IMDB
+                idType = ExternalIdType.TMDB
             ).toRepositoryResult().also { result ->
                 if (result is RepositoryResult.Success) {
                     mediaCache.putEpisodes(mediaId, result.data)
@@ -133,12 +133,48 @@ class MediaRepositoryImpl @Inject constructor(
             debridProvider.checkCache(hashes).toRepositoryResult()
         }
 
+    /**
+     * Session (real MetadataProvider): now delegates to
+     * metadataProvider.searchMedia() (TMDB) instead of
+     * searchProvider.search() (Torrentio). Torrentio's search() always
+     * returns ProviderError.NotFound — it has no free-text capability at
+     * all, see TorrentioSearchProvider's doc comment — so this method
+     * never actually worked until now.
+     *
+     * Maps each Media returned by TMDB into a SearchResult with an empty
+     * candidates list. This is deliberate, not a placeholder: stream
+     * candidates are resolved later, on demand, when the user taps into
+     * Details/Player (which already calls
+     * searchStreamsByMedia()/searchByMedia() via
+     * ResolvePlaybackUseCase's Smart Defaults fallback) — not eagerly
+     * for every search result. Eager resolution was considered and
+     * explicitly rejected this session: it would mean ~2 extra network
+     * calls per result against Torrentio (documented as periodically
+     * unreliable) before the Search screen could render at all, which
+     * conflicts with UI/UX Design v0.1's "Zero-Click to Content" and
+     * "Non-Blocking UI" principles.
+     */
     override suspend fun search(
         query: String,
         profileId: String
     ): RepositoryResult<List<SearchResult>> =
         withContext(dispatchers.io) {
-            searchProvider.search(query).toRepositoryResult()
+            metadataProvider.searchMedia(query)
+                .toRepositoryResult()
+                .let { result ->
+                    when (result) {
+                        is RepositoryResult.Success -> RepositoryResult.Success(
+                            result.data.map { media ->
+                                SearchResult(
+                                    media = media,
+                                    candidates = emptyList(),
+                                    sourceProvider = metadataProvider.id
+                                )
+                            }
+                        )
+                        is RepositoryResult.Failure -> result
+                    }
+                }
         }
 
     /**

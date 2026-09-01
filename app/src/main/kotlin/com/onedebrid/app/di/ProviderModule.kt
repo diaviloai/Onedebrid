@@ -3,7 +3,7 @@ package com.onedebrid.app.di
 import com.onedebrid.app.provider.debrid.DebridProvider
 import com.onedebrid.app.provider.debrid.StubDebridProvider
 import com.onedebrid.app.provider.metadata.MetadataProvider
-import com.onedebrid.app.provider.metadata.StubMetadataProvider
+import com.onedebrid.app.provider.metadata.tmdb.TmdbMetadataProvider
 import com.onedebrid.app.provider.search.SearchProvider
 import com.onedebrid.app.provider.search.torrentio.TorrentioSearchProvider
 import com.onedebrid.app.provider.subtitle.StubSubtitleProvider
@@ -24,10 +24,10 @@ abstract class ProviderModule {
         stub: StubDebridProvider
     ): DebridProvider
 
-    @Binds
+   @Binds
     @Singleton
     abstract fun bindMetadataProvider(
-        stub: StubMetadataProvider
+        tmdb: TmdbMetadataProvider
     ): MetadataProvider
 
     @Binds

@@ -1,9 +1,13 @@
 package com.onedebrid.app.di
 
+import com.onedebrid.app.BuildConfig
+import com.onedebrid.app.provider.metadata.tmdb.TmdbApi
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
 import kotlinx.serialization.json.Json
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -18,27 +22,36 @@ import javax.inject.Singleton
  * Provides networking infrastructure (OkHttp, Retrofit, per-provider API
  * interfaces) for provider implementations that make real HTTP calls.
  *
- * Session 29: first real Retrofit/OkHttp wiring in the app — Retrofit,
- * OkHttp, and the kotlinx.serialization converter were already declared
- * as dependencies (build.gradle.kts / libs.versions.toml) but unused
- * until TorrentioSearchProvider needed them.
+ * Session 29: first real Retrofit/OkHttp wiring in the app (Torrentio).
  *
- * Each external base URL gets its own qualified Retrofit instance rather
- * than one shared instance, since different providers (Torrentio today;
- * TMDB, Real-Debrid, OpenSubtitles later) have different base URLs and
- * potentially different timeout/header needs. A shared OkHttpClient is
- * still reused as the base for all of them, per Technical Standards v0.1
- * (avoid unnecessary duplication).
+ * TMDB added in the real-MetadataProvider session — TMDB requires
+ * Bearer-token auth on every request (unlike Torrentio, which is
+ * keyless), so it gets its own OkHttpClient with an AuthInterceptor
+ * attached, rather than sharing Torrentio's client. This is deliberate:
+ * an auth header meant for TMDB must never be sent to Torrentio (or any
+ * other future keyless/differently-authed provider), and vice versa.
+ *
+ * Each external base URL gets its own qualified Retrofit instance, per
+ * the reasoning already established for Torrentio below.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
     private const val TORRENTIO_BASE_URL = "https://torrentio.strem.fun/"
+    private const val TMDB_BASE_URL = "https://api.themoviedb.org/3/"
 
     @Qualifier
     @Retention(AnnotationRetention.BINARY)
     annotation class TorrentioRetrofit
+
+    @Qualifier
+    @Retention(AnnotationRetention.BINARY)
+    annotation class TmdbRetrofit
+
+    @Qualifier
+    @Retention(AnnotationRetention.BINARY)
+    annotation class TmdbOkHttpClient
 
     @Provides
     @Singleton
@@ -50,18 +63,48 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
+    fun provideLoggingInterceptor(): HttpLoggingInterceptor =
+        HttpLoggingInterceptor().apply {
             // BASIC rather than BODY — avoids dumping full response bodies
-            // (which can be large for a multi-provider stream list) into
-            // logcat on every search. Level can be raised locally when
-            // debugging a specific parsing issue.
+            // into logcat on every request. Level can be raised locally
+            // when debugging a specific parsing issue.
             level = HttpLoggingInterceptor.Level.BASIC
         }
-        return OkHttpClient.Builder()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        logging: HttpLoggingInterceptor
+    ): OkHttpClient =
+        OkHttpClient.Builder()
             .addInterceptor(logging)
             .build()
+
+    /**
+     * Adds "Authorization: Bearer <token>" to every request. Token comes
+     * from BuildConfig, which is populated at build time from
+     * local.properties (local dev) or a GitHub Actions secret (CI) — see
+     * app/build.gradle.kts. Never hardcoded, never committed.
+     */
+    private class AuthInterceptor(private val token: String) : Interceptor {
+        override fun intercept(chain: Interceptor.Chain): Response {
+            val request = chain.request().newBuilder()
+                .addHeader("Authorization", "Bearer $token")
+                .build()
+            return chain.proceed(request)
+        }
     }
+
+    @Provides
+    @Singleton
+    @TmdbOkHttpClient
+    fun provideTmdbOkHttpClient(
+        logging: HttpLoggingInterceptor
+    ): OkHttpClient =
+        OkHttpClient.Builder()
+            .addInterceptor(AuthInterceptor(BuildConfig.TMDB_READ_ACCESS_TOKEN))
+            .addInterceptor(logging)
+            .build()
 
     @Provides
     @Singleton
@@ -83,4 +126,25 @@ object NetworkModule {
     fun provideTorrentioApi(
         @TorrentioRetrofit retrofit: Retrofit
     ): TorrentioApi = retrofit.create(TorrentioApi::class.java)
+
+    @Provides
+    @Singleton
+    @TmdbRetrofit
+    fun provideTmdbRetrofit(
+        @TmdbOkHttpClient okHttpClient: OkHttpClient,
+        json: Json
+    ): Retrofit {
+        val contentType = "application/json".toMediaType()
+        return Retrofit.Builder()
+            .baseUrl(TMDB_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(json.asConverterFactory(contentType))
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTmdbApi(
+        @TmdbRetrofit retrofit: Retrofit
+    ): TmdbApi = retrofit.create(TmdbApi::class.java)
 }

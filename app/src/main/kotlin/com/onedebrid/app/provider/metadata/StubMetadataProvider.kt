@@ -30,4 +30,7 @@ class StubMetadataProvider @Inject constructor() : MetadataProvider {
         targetType: ExternalIdType
     ): ProviderResult<String?> =
         ProviderResult.Failure(ProviderError.ServiceUnavailable)
+
+    override suspend fun searchMedia(query: String): ProviderResult<List<Media>> =
+        ProviderResult.Failure(ProviderError.ServiceUnavailable)
 }
