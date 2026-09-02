@@ -8,13 +8,21 @@ This file is fully rewritten each session — it reflects actual current
 code state, verified by pulling the repo and reading files directly, not
 appended to informally.
 
-Build verification: project compiles cleanly as of Session 29's close,
+**Naming note:** the uploaded architecture docs in this project (Project
+Design.md, database design.md, Internal API Specification.md, provider
+architecture.md, Technical standards.md, UI UX Design.md) refer to the
+app as "OneForAll" throughout. This is the app's old name — it was
+renamed to OneDebrid when Dia started working with Claude on the project.
+Same app, same docs, just an old header. Not a discrepancy to re-flag in
+future sessions.
+
+Build verification: project compiles cleanly as of Session 30's close,
 confirmed via GitHub Actions on the latest pushed commit — job "build"
-succeeded in 3m 49s, per the direct run/job URL
-(`github.com/diaviloai/Onedebrid/actions/runs/33336479138/job/99324170819`).
+succeeded in 4m 21s, per the direct run/job URL
+(`github.com/diaviloai/Onedebrid/actions/runs/33456443813/job/99697300273`).
 All files touched this session were independently re-pulled from
-`raw.githubusercontent.com` after each push and diffed against intended
-content (brace-balance checked) before this file was updated.
+`raw.githubusercontent.com`/the tarball after each push and diffed against
+intended content before this file was updated.
 
 **Sessions 1–25 summary** (condensed from prior full write-ups, which
 remain in git history on this file if the detail is ever needed): built
@@ -25,54 +33,40 @@ infrastructure → use cases → coordinators → ViewModels → Compose screens
 Watching tap-to-resume (`PendingPlaybackHolder` + direct-to-Player nav)
 and cache-first `MediaRepository` reads via `MediaCache`.
 
-**Session 26 summary:** built the Details/Episode-picker screen
-(`ui/details/DetailsScreen.kt` + `DetailsViewModel.kt`), reached only
-from Search. `Route.Details` became the first route in the graph to
-carry a `mediaId` nav arg. Search's results became fully tappable.
-Continue Watching's direct-to-Player flow was left unchanged (explicit
-scope decision). Also fixed a real pre-existing bug: `Media.kt` was
-missing `@Serializable` on the `Media` class itself.
+**Sessions 26–28 summary** (condensed further this session; full detail
+in git history on this file): Session 26 built the Details/Episode-picker
+screen, reached from Search, with `mediaId` as the first nav arg in the
+graph. Session 27 retired `PendingPlaybackHolder` (an in-memory
+singleton) in favor of real Navigation Compose arguments to Player
+(`mediaId` required, `episodeId`/`resumeMs` optional via sentinel
+values); `PlayerViewModel` now resolves its own `Media`/`Episode`/active
+profile on init. Session 28 found `ResolvePlaybackUseCase` had no actual
+Smart Defaults fallback despite every caller relying on it, and that
+`SearchProvider` had exactly one implementation (`StubSearchProvider`,
+always `ServiceUnavailable`) — fixed the fallback logic itself that
+session, deferred the stream-candidate picker UI pending real search
+data.
 
-**Session 27 summary:** retired `PendingPlaybackHolder` (an in-memory
-singleton) entirely, replacing it with real Navigation Compose arguments
-to the Player route (`mediaId` required, `episodeId`/`resumeMs` optional
-via sentinel values). `PlayerViewModel` now resolves `Media`/`Episode`/
-active profile itself on init via `GetMediaByIdUseCase`/new
-`GetEpisodeByIdUseCase`/`GetActiveProfileUseCase`, then builds its own
-`PlaybackRequest`. `HomeViewModel`/`DetailsViewModel` simplified as a
-consequence — both emit a `PlayerNavArgs` (new type, `ui.navigation`)
-carrying primitives instead of pre-resolving `Media`. New
-`MediaRepository.getEpisodeById()` added via `getEpisodes()` + in-memory
-filter. `PendingPlaybackHolder.kt` deleted. Two real compile-breaking
-mistakes were made and fixed within the session (a `str_replace`
-insertion landing after the actual closing brace; a missing final
-closing brace) — both root-caused and fixed before CI came back green.
-Comment-only `PendingPlaybackHolder` references were left behind in
-three files, cleared in Session 28.
-
-**Session 28 summary:** Investigated the stream-candidate picker UI (the
-top Next Step from Session 27) but before designing it, traced
-`preferredSource = null` end-to-end and found `ResolvePlaybackUseCase`
-was failing immediately with `NoCachedStreamAvailable` in that case —
-there was no actual Smart Defaults fallback anywhere, despite every
-current caller passing null. Also found `SearchProvider` had exactly one
-Hilt-bound implementation, `StubSearchProvider`, which always returned
-`ProviderError.ServiceUnavailable` — meaning there was no real search
-data in the app at all, and the picker UI would have had nothing real to
-render. Discussed with Dia and reprioritized: fixed the Smart Defaults
-fallback bug that session (small, contained, real, independently
-valuable) and deferred the picker to a dedicated session once real
-search data exists. `ResolvePlaybackUseCase.invoke()` gained a
-`profileId` param and a private `resolveSmartDefault()` method —
-searched by `request.media.title`, filtered to `SearchResult`s matching
-`request.media.id` exactly, picked the first `StreamCandidate` with a
-non-null hash, resolved it. `PlaybackCoordinator.play()` updated to pass
-`profileId` through. Also cleared three comment-only
-`PendingPlaybackHolder` references punted from Session 27. Both pushes
-verified independently green via direct run/job URL. Key finding carried
-into Session 29: `SearchProvider` had no real implementation at all —
-this blocked both the picker UI and any real testing of the new Smart
-Defaults fallback.
+**Session 29 summary** (condensed this session; full detail in git
+history on this file): built `TorrentioSearchProvider`, OneDebrid's first
+real `SearchProvider`, targeting `torrentio.strem.fun` (free, keyless,
+Stremio-protocol torrent-indexer aggregator, confirmed live via web
+search). Key finding: Torrentio's only endpoint requires an already-known
+IMDb ID — no free-text search exists anywhere in Torrentio, or anywhere
+else in the codebase at the time. Added `SearchProvider.searchByMedia(
+media, filters)` as a new method alongside the existing free-text
+`search()`, rather than replacing it — `search()` stayed honestly
+non-functional (`ProviderError.NotFound`) pending a real metadata-search
+provider. `ResolvePlaybackUseCase.resolveSmartDefault()` was switched to
+call the new ID-based path, which also fixed a real Session 28 omission
+(`request.episode` was never passed through, so TV shows could never
+resolve via Smart Defaults). First real Retrofit/OkHttp wiring landed in
+`NetworkModule.kt`. Two mistakes were made and caught via content
+diffing: a `ProviderModule.kt` paste that corrupted the file (fixed with
+a full-file overwrite), and a deprecated OkHttp API call caught by CI
+(fixed with the correct `toMediaType()` import). Key finding carried into
+Session 30: `searchByMedia()` requires `Media.imdbId`, and nothing in the
+app produced a real one — no `MetadataProvider` existed beyond the stub.
 
 ## Package Structure
 
@@ -80,26 +74,23 @@ com.onedebrid.app/
     ├── MainActivity.kt
     ├── OneDebridApplication.kt
     ├── coordinator/
-    │   ├── PlaybackCoordinator.kt (Session 28: play() passes profileId
-    │   │   through to resolvePlaybackUseCase())
+    │   ├── PlaybackCoordinator.kt
     │   ├── SearchCoordinator.kt
     │   └── SessionCoordinator.kt
     ├── data/
-    │   ├── local/
-    │   │   ├── AppDatabase.kt
-    │   │   ├── MediaCache.kt (Session 25 — wraps CacheEntryDao)
-    │   │   ├── TypeConverters.kt
-    │   │   ├── dao/ (unchanged)
-    │   │   └── entity/ (unchanged)
+    │   ├── local/ (AppDatabase.kt, MediaCache.kt, TypeConverters.kt,
+    │   │   dao/, entity/ — unchanged this session)
     │   └── repository/
-    │       ├── MediaRepository.kt (Session 29: added
-    │       │   searchStreamsByMedia(media, episode) — ID-based stream
-    │       │   lookup, separate from the free-text search() method; see
-    │       │   "Session 29 — What Was Done" below)
-    │       ├── MediaRepositoryImpl.kt (Session 29: implements
-    │       │   searchStreamsByMedia() as a pass-through to
-    │       │   searchProvider.searchByMedia(), translating
-    │       │   episode → SearchFilters(season, episode))
+    │       ├── MediaRepository.kt (unchanged this session — interface
+    │       │   already had searchStreamsByMedia() from Session 29)
+    │       ├── MediaRepositoryImpl.kt (Session 30: TWO changes — (1)
+    │       │   getMediaDetails()/getEpisodes() fixed from
+    │       │   ExternalIdType.IMDB to ExternalIdType.TMDB, a real
+    │       │   pre-existing bug found and fixed this session, see
+    │       │   "Session 30 — What Was Done" below; (2) search() now
+    │       │   delegates to metadataProvider.searchMedia() instead of
+    │       │   searchProvider.search(), mapping each Media to a
+    │       │   SearchResult with an empty candidates list)
     │       ├── PlaybackRepository.kt / PlaybackRepositoryImpl.kt
     │       ├── ProfileRepository.kt / ProfileRepositoryImpl.kt
     │       ├── RepositoryResult.kt
@@ -108,18 +99,23 @@ com.onedebrid.app/
     │       └── (Subtitle/Download repositories not yet built)
     ├── di/
     │   ├── CoroutineDispatchers.kt
-    │   ├── NetworkModule.kt (NEW, Session 29 — first real Retrofit/
-    │   │   OkHttp wiring in the app; provides a shared OkHttpClient, a
-    │   │   Torrentio-qualified Retrofit instance, and TorrentioApi)
+    │   ├── NetworkModule.kt (Session 30: added a second, TMDB-qualified
+    │   │   Retrofit instance + TmdbApi, a dedicated TmdbOkHttpClient
+    │   │   carrying a new AuthInterceptor (Bearer token from
+    │   │   BuildConfig), and extracted the shared HttpLoggingInterceptor
+    │   │   into its own @Provides so both OkHttp clients reuse the same
+    │   │   instance. Torrentio's existing wiring unchanged/untouched)
     │   └── DatabaseModule, RepositoryModule, ProviderModule
-    │       (ProviderModule Session 29: binds TorrentioSearchProvider as
-    │       the SearchProvider, replacing StubSearchProvider)
+    │       (ProviderModule Session 30: bindMetadataProvider() now binds
+    │       TmdbMetadataProvider, replacing StubMetadataProvider)
     ├── domain/
     │   ├── error/
     │   │   └── AppError.kt (unchanged this session — see Open TODOs re:
     │   │       ValidationError)
     │   └── model/
-    │       ├── Media.kt
+    │       ├── Media.kt (unchanged this session, but see IMPORTANT note
+    │       │   below — Media.id's real-world meaning was decided this
+    │       │   session, not a code change)
     │       ├── Episode.kt
     │       ├── PlaybackRequest.kt
     │       ├── SearchResult.kt (StreamCandidate defined here)
@@ -129,67 +125,54 @@ com.onedebrid.app/
     │       ├── UserProfile.kt
     │       └── WatchedItem.kt
     ├── provider/
-    │   └── search/
-    │       ├── SearchProvider.kt (Session 29: added searchByMedia() —
-    │       │   ID-based lookup, alongside the existing free-text
-    │       │   search(). See "Session 29 — What Was Done" below for the
-    │       │   full design reasoning)
-    │       ├── StubSearchProvider.kt (Session 29: added a matching
-    │       │   searchByMedia() override, also always fails; no longer
-    │       │   Hilt-bound as of this session, kept as a reference/
-    │       │   fallback implementation)
-    │       └── torrentio/ (NEW, Session 29)
-    │           ├── TorrentioApi.kt — Retrofit interface,
-    │           │   GET stream/{type}/{id}.json
-    │           ├── TorrentioDto.kt — @Serializable response DTOs
-    │           └── TorrentioSearchProvider.kt — real SearchProvider
+    │   ├── search/ (unchanged this session — Torrentio work is
+    │   │   Session 29's, see condensed summary above)
+    │   │   ├── SearchProvider.kt
+    │   │   ├── StubSearchProvider.kt
+    │   │   └── torrentio/
+    │   │       ├── TorrentioApi.kt
+    │   │       ├── TorrentioDto.kt
+    │   │       └── TorrentioSearchProvider.kt
+    │   └── metadata/
+    │       ├── MetadataProvider.kt (Session 30: added searchMedia(query)
+    │       │   to the interface, alongside the three existing ID-based
+    │       │   methods — same additive pattern as Session 29's
+    │       │   searchByMedia() on SearchProvider. See "Session 30 — What
+    │       │   Was Done" below for the full reasoning)
+    │       ├── StubMetadataProvider.kt (Session 30: added a matching
+    │       │   searchMedia() override, also fails; no longer Hilt-bound
+    │       │   as of this session, kept as a reference/fallback impl)
+    │       ├── ExternalIdType.kt (enum, defined inside
+    │       │   MetadataProvider.kt — IMDB/TMDB/TVDB/TRAKT)
+    │       └── tmdb/ (NEW, Session 30)
+    │           ├── TmdbApi.kt — Retrofit interface: searchMulti(),
+    │           │   getMovieDetails(), getTvDetails(), getTvSeason()
+    │           ├── TmdbDto.kt — @Serializable response DTOs, including
+    │           │   the movie/TV imdb_id asymmetry (see below)
+    │           └── TmdbMetadataProvider.kt — real MetadataProvider
     │               implementation, now Hilt-bound via ProviderModule
-    │   (MetadataProvider, StubMetadataProvider, DebridProvider, others —
-    │    unchanged; still no real MetadataProvider/DebridProvider exists)
-    ├── ui/
-    │   ├── details/
-    │   │   ├── DetailsScreen.kt (Session 27: onNavigateToPlayer
-    │   │   │   signature carries mediaId/episodeId/resumeMs)
-    │   │   └── DetailsViewModel.kt (Session 27: emits PlayerNavArgs)
-    │   ├── home/
-    │   │   ├── HomeScreen.kt (Session 27: dead resolving-state UI
-    │   │   │   removed)
-    │   │   └── HomeViewModel.kt (Session 27: emits PlayerNavArgs
-    │   │       immediately, no longer resolves Media first)
-    │   ├── navigation/
-    │   │   ├── NavGraph.kt (Session 27: Route.Player carries mediaId/
-    │   │   │   episodeId/resumeMs nav args)
-    │   │   └── PlayerNavArgs.kt (Session 27)
-    │   ├── player/
-    │   │   ├── PlayerScreen.kt (Session 27)
-    │   │   └── PlayerViewModel.kt (Session 27: resolves its own Media/
-    │   │       Episode/active profile on init from nav args)
-    │   ├── search/
-    │   │   ├── SearchScreen.kt (Session 28: stale
-    │   │   │   PendingPlaybackHolder doc-comment references cleared)
-    │   │   └── SearchViewModel.kt (Session 28: same cleanup)
-    │   └── settings/
-    │       ├── SettingsScreen.kt
-    │       └── ProfileViewModel.kt
-    └── usecase/
+    │   (DebridProvider, others — unchanged; still no real DebridProvider
+    │    exists)
+    ├── ui/ (unchanged this session — no UI screens were touched;
+    │   resolve-on-tap already worked end-to-end from Session 27/29's
+    │   work, see "Session 30 — What Was Done" below)
+    │   ├── details/ (DetailsScreen.kt, DetailsViewModel.kt)
+    │   ├── home/ (HomeScreen.kt, HomeViewModel.kt)
+    │   ├── navigation/ (NavGraph.kt, PlayerNavArgs.kt)
+    │   ├── player/ (PlayerScreen.kt, PlayerViewModel.kt)
+    │   ├── search/ (SearchScreen.kt, SearchViewModel.kt)
+    │   └── settings/ (SettingsScreen.kt, ProfileViewModel.kt)
+    └── usecase/ (unchanged this session)
         ├── CreateProfileUseCase.kt
         ├── DeleteProfileUseCase.kt
         ├── EndPlaybackSessionUseCase.kt
         ├── GetActiveProfileUseCase.kt
         ├── GetContinueWatchingUseCase.kt
-        ├── GetEpisodeByIdUseCase.kt (Session 27)
+        ├── GetEpisodeByIdUseCase.kt
         ├── GetEpisodesUseCase.kt
         ├── GetMediaByIdUseCase.kt
         ├── RemoveFromContinueWatchingUseCase.kt
-        ├── ResolvePlaybackUseCase.kt (Session 29: resolveSmartDefault()
-        │   now calls mediaRepository.searchStreamsByMedia(media,
-        │   episode) instead of the title-based search() path — also
-        │   fixes a real Session 28 omission where request.episode was
-        │   never passed through, meaning a TV_SHOW PlaybackRequest could
-        │   never have resolved via Smart Defaults even with a working
-        │   provider. profileId dropped from the private
-        │   resolveSmartDefault() signature — no longer needed there. See
-        │   "Session 29 — What Was Done" below)
+        ├── ResolvePlaybackUseCase.kt
         ├── SavePlaybackPositionUseCase.kt
         ├── SearchMediaUseCase.kt
         ├── SwitchProfileUseCase.kt
@@ -199,262 +182,157 @@ com.onedebrid.app/
 (This tree reflects what's been directly read/touched across sessions,
 not a guaranteed exhaustive listing — see the repo itself for ground
 truth on files not mentioned in recent session notes.)
+## Build Configuration (NEW, Session 30)
 
-## App Navigation State (unchanged since Session 27)
+**`app/build.gradle.kts`** now reads `local.properties` at configuration
+time (via `java.util.Properties`) and requires a
+`TMDB_READ_ACCESS_TOKEN` entry to exist there — throws a `GradleException`
+with a clear message if it's missing, rather than compiling with a blank
+token and failing confusingly at runtime. Exposed to app code as
+`BuildConfig.TMDB_READ_ACCESS_TOKEN`. `buildFeatures.buildConfig = true`
+was added (not previously enabled).
 
-Five routes exist, all wired into a single `NavGraph.kt`: Home (start
-destination), Search, Details, Player, Settings. See git history on this
-file (Session 27/28 entries) for the full per-route description — no
-navigation changes were made in Session 29.
+**Local dev:** Dia's device has a `local.properties` (gitignored, never
+committed) containing the line `TMDB_READ_ACCESS_TOKEN=<her v4 Read
+Access Token — the long JWT, NOT the shorter v3 API key>`.
 
-## Session 29 — What Was Done
-
-**Scope confirmed with Dia up front:** three candidates were on the
-table per Session 28's Next Steps (a real SearchProvider; the
-stream-candidate picker UI; Continue Watching → Details routing). Dia
-chose the SearchProvider work, correctly identifying it as the actual
-blocker underneath the other two.
-
-**Backend choice — Torrentio, researched and confirmed live via web
-search** (not assumed from training data, since this is exactly the
-kind of "current status" fact that goes stale): Torrentio
-(`torrentio.strem.fun`) is a free, keyless, Stremio-protocol torrent-
-indexer aggregator, confirmed reachable as of session date via an
-independent third-party status-monitoring source that checks it every
-minute. Known tradeoff, discussed with Dia and accepted: multiple
-independent sources describe Torrentio as periodically flaky under
-high load — designed for defensively from the start (see error mapping
-below), not treated as a hidden risk.
-
-**Design problem found before writing any code — this was the key
-architectural discussion this session:** Torrentio's only endpoint,
-`GET /stream/{type}/{id}.json`, requires an already-known IMDb ID (and
-season/episode for series) — it has no free-text search capability at
-all. But `SearchProvider.search(query: String)` — the only method that
-existed — is free-text, and every call site in the app (SearchScreen →
-SearchViewModel → SearchCoordinator → SearchMediaUseCase →
-MediaRepository.search()) was free-text end to end. A
-`TorrentioSearchProvider` implementing only `search()` would have been
-just as functionally useless as `StubSearchProvider`, silently.
-
-Traced the full blast radius before proposing a fix (every call site of
-`.search(` repo-wide) and found something important: **there is no
-free-text-capable provider of any kind in this codebase yet** — no TMDB
-integration, no title→IMDb-ID resolution step anywhere.
-`MetadataProvider` only has ID-based lookup (`fetchMediaDetails(
-externalId, idType)`), not free-text search either. This meant the
-"real" fix wasn't just fixing `SearchProvider`'s contract — free-text
-search has no possible implementation yet regardless of provider,
-because nothing in the architecture can turn a title string into an
-IMDb ID today.
-
-**Discussed with Dia and agreed on scope:** rather than also building a
-TMDB-backed free-text search provider this session (a separate, larger
-piece of work), added `searchByMedia(media, filters)` as a new method
-on `SearchProvider` **alongside** the existing `search()` — an addition,
-not a replacement. `search()` stays free-text and stays honestly
-non-functional (returns `ProviderError.NotFound` from
-`TorrentioSearchProvider`, explicitly documented as "this provider
-genuinely cannot do this job") until a real metadata-search provider
-exists. `searchByMedia()` is where Torrentio actually plugs in
-correctly — it's exactly the ID-based shape Torrentio supports, and
-exactly what `ResolvePlaybackUseCase.resolveSmartDefault()` already has
-the inputs for (it already holds a full `Media` with `imdbId`, from
-`PlaybackRequest`).
-
-**Files created:**
-- **`provider/search/torrentio/TorrentioDto.kt`** — `@Serializable`
-  response DTOs (`TorrentioStreamResponseDto`, `TorrentioStreamDto`,
-  `TorrentioBehaviorHintsDto`) matching the Stremio addon stream-
-  response protocol. `infoHash` kept nullable — see next bullet.
-- **`provider/search/torrentio/TorrentioApi.kt`** — minimal Retrofit
-  interface, one method: `GET stream/{type}/{id}.json`.
-- **`provider/search/torrentio/TorrentioSearchProvider.kt`** — the real
-  implementation. Builds the movie (`imdbId`) or series
-  (`imdbId:season:episode`) lookup ID, calls the API, maps
-  `TorrentioStreamDto` → `StreamCandidate`. Two things researched and
-  handled defensively rather than assumed: (1) a real, documented
-  Torrentio API instability (rivenmedia/riven#1342, Jan 2026) where
-  `infoHash` is sometimes omitted and only recoverable by extracting a
-  40-hex-char segment from the stream's debrid `url` field —
-  `extractHash()` tries `infoHash` first, falls back to the URL scan,
-  and drops (not crashes on) entries where neither works; (2) quality/
-  size/seeder parsing from Torrentio's free-text `title` field via
-  simple pattern matching (documented as not exhaustive — a candidate
-  with `VideoQuality.UNKNOWN` or a null seeder count is still usable,
-  per `VideoQuality`'s own existing doc comment). HTTP errors mapped to
-  `ProviderError` by status code (401/403 → AuthenticationFailed, 404 →
-  NotFound, 429 → RateLimited, 5xx → ServiceUnavailable); `IOException`
-  → NetworkError; `SerializationException` → ParsingError.
-- **`di/NetworkModule.kt`** — first real Retrofit/OkHttp wiring in the
-  app (the dependencies were already declared in
-  `build.gradle.kts`/`libs.versions.toml`, just unused until now).
-  Provides a shared `OkHttpClient` (with `HttpLoggingInterceptor` at
-  `BASIC` level), a `@TorrentioRetrofit`-qualified `Retrofit` instance
-  pointed at `https://torrentio.strem.fun/`, and `TorrentioApi`.
-**Files modified:**
-- **`provider/search/SearchProvider.kt`** — added `searchByMedia(media,
-  filters)` to the interface, doc comment explains the free-text-vs-ID
-  split (see above).
-- **`provider/search/StubSearchProvider.kt`** — added a matching
-  `searchByMedia()` override (also fails), to keep compiling against the
-  updated interface. No longer Hilt-bound as of this session (see
-  ProviderModule below) but kept in the codebase as a reference/fallback
-  implementation, same as before.
-- **`di/ProviderModule.kt`** — `bindSearchProvider()` now binds
-  `TorrentioSearchProvider` instead of `StubSearchProvider`.
-- **`data/repository/MediaRepository.kt`** /
-  **`MediaRepositoryImpl.kt`** — added `searchStreamsByMedia(media,
-  episode)`, a pass-through to `searchProvider.searchByMedia()` that
-  translates `episode?.seasonNumber`/`episodeNumber` into
-  `SearchFilters(season, episode)`. Exists so
-  `ResolvePlaybackUseCase` never touches the provider directly, per
-  `Internal_API_Specification.md`'s layering rules.
-- **`usecase/ResolvePlaybackUseCase.kt`** — `resolveSmartDefault()`
-  switched from `mediaRepository.search(title)` to
-  `mediaRepository.searchStreamsByMedia(media, episode)`. Also fixes a
-  real Session 28 omission: `request.episode` was never passed to the
-  search call at all, meaning a TV_SHOW `PlaybackRequest` could never
-  have resolved via Smart Defaults regardless of provider (Torrentio's
-  series endpoint requires season/episode). `profileId` dropped from
-  this private method's signature (no longer used inside it); `invoke()`
-  still receives and uses `profileId` as before, just doesn't thread it
-  into this call anymore.
-
-**Two real mistakes made and caught this session — both via content
-diffing, not assumed correct because a paste "went through":**
-
-1. **`ProviderModule.kt` paste corrupted the file** — the intended
-   full-file replacement did not cleanly overwrite the existing content;
-   the pushed result had `bindSearchProvider()` duplicated (one correct,
-   one stale referencing the now-deleted `StubSearchProvider` import)
-   and `bindDebridProvider()` missing entirely. Caught by re-pulling and
-   reading the actual pushed file rather than trusting the paste. Fixed
-   with an explicit full-file overwrite (not a find/replace, since the
-   corrupted state made anchor text unreliable) and re-verified clean on
-   the next pull.
-2. **`NetworkModule.kt` used a deprecated OkHttp API that failed the
-   build** — `okhttp3.MediaType.Companion.get(this)` (written as an
-   uncertain workaround at authoring time and explicitly flagged as such
-   before Dia pasted it) compiled but triggered a deprecation-as-error
-   failure (`compileDebugKotlin FAILED`, not a KSP/annotation-processing
-   error). Fixed with a proper `okhttp3.MediaType.Companion.toMediaType`
-   import and removal of the local wrapper function.
-
-Both were caught by pulling the real CI log / real pushed file content
-rather than accepting "ran clean" or a successful paste at face value —
-consistent with this project's standing verification practice.
-
-**Build verification:** final push (the `NetworkModule.kt` fix) verified
-green via direct job URL:
-`github.com/diaviloai/Onedebrid/actions/runs/33336479138/job/99324170819`
-— job "build" succeeded in 3m 49s. All 13 annotations on that run were
-confirmed to be GitHub infrastructure noise (Gradle cache-service outage
-messages, Node.js/setup-java deprecation notices) by checking the job's
-actual top-level status line, not inferred from the annotation list
-alone — same lesson as Sessions 27/28. All ten touched/created files
-were re-pulled fresh from the tarball after the final push and brace-
-balance checked; all matched intended content with no mismatches.
+**CI:** a GitHub Actions repository secret named `TMDB_READ_ACCESS_TOKEN`
+(same value) is set at
+`github.com/diaviloai/Onedebrid/settings/secrets/actions`. The workflow
+writes it into a fresh `local.properties` on the runner immediately after
+checkout — **before any Gradle-invoking step**, including "Regenerate
+Gradle wrapper." This ordering matters and was the cause of a real bug
+this session — see "Session 30 — What Was Done" below.
 
 ## Known, Deliberate Limitations (documented in code, not silently
 worked around)
 
-- **`SearchProvider.search()` (free-text) is still non-functional** —
-  `TorrentioSearchProvider` explicitly returns `ProviderError.NotFound`
-  from it, since Torrentio has no free-text capability at all. This is
-  now a permanent, correct limitation of this specific provider, not a
-  temporary stub gap — free-text search requires a different kind of
-  provider (e.g. TMDB-backed catalog search) that does not exist yet.
-  The Search screen itself will continue to show its error state until
-  that provider exists.
-- **`SearchProvider.searchByMedia()` requires `Media.imdbId` to be
-  non-null** — returns `ProviderError.NotFound` (mapped to
-  `AppError.NoCachedStreamAvailable`) otherwise. Since there is still no
-  real `MetadataProvider` (only `StubMetadataProvider`), no `Media` in
-  the app today actually carries a real `imdbId` from a live fetch —
-  this path is implemented and correct but, like Session 28's fallback
-  fix, not yet exercisable against real data end-to-end. A `Media`
-  seeded with a real `imdbId` (e.g. via `MediaCache` directly, for
-  manual testing) would exercise it today.
+- **`SearchProvider.search()` (Torrentio's free-text path) is still
+  permanently non-functional** — unchanged from Session 29. This is
+  intentionally NOT what fixes free-text search; `MediaRepository.
+  search()` no longer calls it at all as of this session (calls
+  `MetadataProvider.searchMedia()`/TMDB instead). Torrentio's `search()`
+  remains implemented-but-honest for any future direct caller.
+- **`Media.imdbId` is null for every `Media` returned by `searchMedia()`**
+  (TMDB search results) — this is a real, permanent constraint of TMDB's
+  API, not a bug: `append_to_response` (TMDB's only mechanism for
+  returning `imdb_id`) is documented as working only on detail endpoints,
+  never on `/search/multi`. A caller needing a specific item's `imdbId`
+  (e.g. before `SearchProvider.searchByMedia()`/Torrentio can run) must
+  call `fetchMediaDetails()` on it afterward — which is exactly what the
+  existing resolve-on-tap flow (Details → Player →
+  `ResolvePlaybackUseCase`) already does via `GetMediaByIdUseCase`, no
+  new code needed for this session's scope.
+- **Movie vs TV asymmetry for `imdb_id`** — movie detail responses
+  include `imdb_id` at the top level with no `append_to_response` needed;
+  TV detail responses do not, and require `append_to_response=
+  external_ids` to get it at all, nested under a separate object.
+  `TmdbMetadataProvider` handles both shapes explicitly, not assumed
+  identical. Verified against TMDB's own documentation and independent
+  real-world integration reports this session, not assumed from training
+  data.
+- **`fetchMediaDetails()` tries `/movie/{id}` first, falls back to
+  `/tv/{id}` on 404** — `Media.id` (a TMDB id) does not by itself
+  indicate movie vs TV, and nothing in the domain model currently
+  disambiguates before this call. Every TV lookup costs one extra,
+  wasted HTTP call today. A cleaner fix would carry `MediaType` alongside
+  the id through `getMediaDetails()`'s callers — not done this session,
+  known and flagged, not hidden.
+- **`fetchEpisodes(season = null)` ("all seasons") is an N+1 call
+  pattern** — TMDB has no single-call "all episodes" endpoint (verified,
+  not assumed). Fetches TV details first (to learn season count), then
+  each season sequentially. Callers should pass an explicit season where
+  possible.
+- **`resolveExternalId()` is not implemented** — `TmdbMetadataProvider`
+  returns `ProviderError.ServiceUnavailable` honestly rather than
+  pretending to look something up. TMDB's `/find/{external_id}` endpoint
+  would implement this properly; nothing in the app calls this method
+  yet, so building it now would have been speculative.
+- **Free-text Search does NOT eagerly resolve streams** — a Session 30
+  design decision, discussed explicitly with Dia and deliberately chosen
+  over the alternative (eager per-result Torrentio lookups, estimated at
+  roughly 2N+1 network calls per search against a provider already
+  documented as periodically unreliable). Streams resolve only when a
+  user taps into Details/Player, reusing Session 27/29's existing
+  resolve-on-tap path unchanged. Matches UI/UX Design v0.1's "Zero-Click
+  to Content" and "Non-Blocking UI" principles.
 - **`ResolvePlaybackUseCase`'s Smart Defaults selection is still "first
   candidate with a hash,"** not a real ranking algorithm — unchanged
-  from Session 28, still deliberately minimal pending real profile-
-  preference signal reaching this layer.
-- **Torrentio's own reliability is a known, accepted tradeoff** — free
-  and keyless, but documented by multiple independent sources as
-  periodically flaky under load. Mapped to `ProviderError.ServiceUnavailable`/
-  `NetworkError` like any other provider failure; no special retry/
-  circuit-breaker logic added this session (not discussed as in-scope).
-- **No real `MetadataProvider` or `DebridProvider` exists yet** —
-  unchanged. `TorrentioSearchProvider` only replaces the `SearchProvider`
-  slot.
+  from Session 28.
+- **Torrentio's own reliability is a known, accepted tradeoff** —
+  unchanged from Session 29.
+- **No real `DebridProvider` exists yet** — unchanged.
 - **Stream-candidate picker UI still not built** — unchanged from
-  Session 28; now meaningfully less blocked (a real, if narrow,
-  `SearchProvider` path exists), but still not started.
-- All Session 28 limitations not superseded above remain accurate — see
-  git history on this file for the full Session 28 list.
+  Session 28/29; now meaningfully less blocked (real `Media`/`imdbId`
+  can exist end-to-end for the first time as of this session).
+- All Session 28/29 limitations not superseded above remain accurate —
+  see git history on this file for the full lists.
 
 ## Carried-Forward Lessons
 
-- **A file-content diff after push can catch a corrupted/duplicated
-  paste that a naive "did it push" check would miss** (Session 29 —
-  `ProviderModule.kt`). The corruption here wasn't truncation (Session
-  27/28's failure mode) — it was old and new content merging incorrectly
-  in a way that still produced a syntactically-plausible-looking diff at
-  a glance. Full read-through of the pulled file, not just a diff
-  summary, caught it.
-- **A CI failure's error message can look like the wrong subsystem** —
-  the `ProviderModule.kt` corruption surfaced as a KSP/Hilt "could not
-  be resolved" error, which reads like a Dagger graph problem, but the
-  actual root cause was upstream: a plain content-corruption bug in the
-  source file KSP was trying to process. Worth reading past the
-  immediate error type to what's actually different in the file.
-- **A CI compile failure is not always a KSP/annotation-processing
-  error** — the `NetworkModule.kt` deprecation failure showed up as a
-  plain `compileDebugKotlin FAILED`, a different task and failure mode
-  than the `ProviderModule.kt` issue above. Worth reading which Gradle
-  task actually failed, not assuming it's always the same subsystem.
-- **Flagging genuine uncertainty about a specific line before it's
-  pasted is worth doing even when most of a file is solid** — the
-  `MediaType.Companion.get()` workaround in `NetworkModule.kt` was
-  explicitly called out as "least certain to compile cleanly" before
-  Dia pasted it, and it was in fact the exact line CI failed on. Doesn't
-  replace verification, but made the failure fast to diagnose.
-- **When a third-party API's exact wire format can't be verified against
-  official developer docs (only against end-user troubleshooting content
-  and real integration code from other open-source projects), design
-  defensively for the documented instability rather than assuming the
-  happy-path shape** (Session 29 — Torrentio's `infoHash` omission
-  issue, sourced from a real GitHub issue in another project, not
-  assumed).
-- All Session 27/28 lessons not superseded above remain accurate — see
-  git history on this file for the full list (brace-balance checks,
+- **A workflow step that writes a required secret to a file must run
+  before ANY step that invokes Gradle, not just before the final build
+  step** (Session 30 — new lesson). `gradle wrapper --gradle-version=X`
+  evaluates the project's build scripts as part of configuring the
+  wrapper task — it is not a lightweight, script-free operation. A
+  `build.gradle.kts` guard that throws when a required
+  `local.properties` value is missing will fire during wrapper
+  regeneration if the secret-writing step comes later in the workflow,
+  even though the actual build step never ran. The fix was moving "Write
+  local.properties" to immediately after checkout, before "Set up JDK"
+  and everything after it.
+- **A misleading old CI log can look identical to a new failure with a
+  different real cause** (Session 30). The `local.properties` missing-
+  token error text was byte-for-byte identical on both the very first
+  failed run (genuinely no secret written anywhere yet) and a later run
+  (secret existed, but the step order was wrong) — same exception,
+  same message, different root cause each time. The annotation summary
+  view alone was not enough to tell these apart; only opening the actual
+  failed step's raw log (not just the job's top-level annotation list)
+  showed which step was actually running when the exception fired.
+- **A "green checkmark" reported secondhand is not sufficient
+  verification** (Session 30, reinforcing existing standing practice) —
+  Dia's own read of the Actions tab as "succeeded" was correct in this
+  case, but was still independently confirmed via the direct job URL
+  before being treated as true, consistent with "verify, don't trust"
+  applying to CI status as much as to file content.
+- **A YAML workflow file is whitespace/structure-sensitive in ways a
+  human proofreading a pasted diff can easily miss** (Session 30) — a
+  find/replace-by-description on `build.yml` produced a file with a
+  missing indent on one line and a duplicated `-` on another, which
+  caused the workflow to fail to parse at all (instant failure, several
+  steps greyed out) rather than fail partway through a step. Full-file
+  replacement (select-all-delete, paste fresh) was used to recover,
+  rather than another round of targeted find/replace on a
+  whitespace-sensitive file.
+- All Session 27/28/29 lessons not superseded above remain accurate —
+  see git history on this file for the full list (brace-balance checks,
   Composable-context rule, Flow collection pattern,
   `MutableStateFlow.update{}` gotcha, nav-arg sentinel-value pattern,
-  infra-noise-isn't-sufficient CI lesson, "check data availability
-  before scoping UI work," etc.)
-
+  infra-noise-isn't-sufficient CI lesson, CI-error-category-can-mislead
+  lesson, "check data availability before scoping UI work," etc.)
 ## Next Steps, In Order
 
-1. **A real `MetadataProvider` (e.g. TMDB-backed).** Newly the top
-   priority as of Session 29 — this is the actual remaining blocker for
-   both free-text search (`SearchProvider.search()`) and for
-   `searchByMedia()` to ever run against real `Media` (needs a real
-   `imdbId`, which nothing currently produces). Not yet scoped or
-   discussed with Dia.
-2. **Stream-candidate picker UI.** Less blocked than before (a real,
-   narrow `SearchProvider` path exists via `searchByMedia()`), but still
-   depends on #1 above to have real `Media`/`imdbId` to search with
-   end-to-end. `ResolvePlaybackUseCase.resolveSmartDefault()`'s
-   candidate-fetch logic remains the natural extraction point.
-3. **Continue Watching → Details routing with resumePositionMs.**
-   Unchanged from Session 28's Next Steps — independent of the
-   search-provider work, could be picked up instead if Dia wants to
-   sidestep the MetadataProvider dependency chain entirely.
-4. **`AppError.ValidationError` case.** Unchanged, low urgency.
-5. **Completion-percentage / markAsCompleted wiring.** Not started.
-6. **SettingsScreen preference-write debounce** — only if needed.
-7. **HomeScreen proactive title/artwork display** — only if a priority.
+1. **Stream-candidate picker UI.** Now the top priority — no longer
+   blocked on real search data (Session 29) or a real `imdbId` source
+   (Session 30). `ResolvePlaybackUseCase.resolveSmartDefault()`'s
+   candidate-fetch logic remains the natural extraction point. Worth
+   confirming with Dia whether this should surface all
+   `searchByMedia()` candidates or keep "first candidate with a hash"
+   as the default with the picker as an override path.
+2. **Continue Watching → Details routing with resumePositionMs.**
+   Unchanged from Session 28/29's Next Steps — independent of all
+   provider work, could be picked up instead if Dia wants a smaller,
+   self-contained session.
+3. **`AppError.ValidationError` case.** Unchanged, low urgency.
+4. **Completion-percentage / markAsCompleted wiring.** Not started.
+5. **SettingsScreen preference-write debounce** — only if needed.
+6. **HomeScreen proactive title/artwork display** — only if a priority.
+7. **`fetchMediaDetails()`'s movie/TV-ambiguity extra HTTP call** — worth
+   a look if it proves costly in practice; carrying `MediaType` through
+   `getMediaDetails()`'s call chain would fix it cleanly.
+8. **`resolveExternalId()` real implementation (TMDB `/find` endpoint)**
+   — only if a real caller emerges; speculative otherwise.
 
 ## Open TODOs (carried forward, unchanged unless noted)
 
@@ -462,10 +340,7 @@ worked around)
 - SearchRepository.updateSearchSession uses `Map<String, String>` for
   filters; revisit if SearchFilters gets promoted to a domain model
 - AppError has no ValidationError case; also relevant to
-  `searchByMedia()`'s missing-`imdbId` NotFound case (Session 29 — reuses
-  the existing NotFound→NoCachedStreamAvailable mapping rather than
-  inventing a new path, consistent with getEpisodeById()'s existing
-  precedent of reusing broad error types)
+  `searchByMedia()`'s missing-`imdbId` NotFound case
 - StartPlaybackUseCase uses a fully qualified AppError reference inline
 - HomeViewModel.removeItem() has no failure feedback path
 - SearchScreen.kt uses fully-qualified Compose imports inline
@@ -479,17 +354,205 @@ worked around)
 - `getEpisodeById()`'s not-found path reuses AppError.Unknown
 - `SearchUiState.activeProfileId` is dead state (Session 26 call)
 - `search_tv_show_unsupported` string resource is unused
-- `Media.id` round-trip between Search/Details/Player is unverified,
-  no automated tests exist in this repo
-- **NEW (Session 29):** `TorrentioSearchProvider`'s title-text quality/
-  size/seeder parsing is a simple pattern match, not exhaustive — will
-  silently under-parse titles that don't match common release-naming
-  conventions (falls back to `VideoQuality.UNKNOWN`/null, which is
-  handled gracefully elsewhere, not a crash risk).
-- **NEW (Session 29):** No retry/backoff logic exists for Torrentio's
-  documented periodic unreliability — a transient failure surfaces the
-  same as a permanent one today. Not discussed as in-scope this session;
-  worth a look if it proves disruptive in practice.
+- `Media.id` round-trip between Search/Details/Player is unverified, no
+  automated tests exist in this repo — NOTE (Session 30): `Media.id`'s
+  actual meaning was formally decided this session (TMDB id, stringified
+  — see "Session 30 — What Was Done" below); this TODO is about test
+  coverage of the round-trip, not about the meaning being undefined
+  anymore.
+- `TorrentioSearchProvider`'s title-text quality/size/seeder parsing is a
+  simple pattern match, not exhaustive (Session 29, unchanged)
+- No retry/backoff logic exists for Torrentio's documented periodic
+  unreliability (Session 29, unchanged)
+- **NEW (Session 30):** `fetchMediaDetails()` costs one wasted HTTP call
+  for every TV lookup (tries `/movie/{id}` first, always 404s for TV
+  before trying `/tv/{id}`) — see Next Steps #7.
+- **NEW (Session 30):** `fetchEpisodes(season = null)` is an N+1 call
+  pattern (fetches TV details for season count, then each season
+  sequentially) — no single-call TMDB alternative exists.
+- **NEW (Session 30):** `resolveExternalId()` returns
+  `ServiceUnavailable` unconditionally — not implemented, no caller
+  exists yet to justify building it. See Next Steps #8.
+- **NEW (Session 30):** TMDB search/multi results have `genreIds` (raw
+  int ids) but `TmdbMetadataProvider.toMedia()` for search results maps
+  `genres = emptyList()` rather than resolving names — genre names are
+  only available from the detail endpoints today. Not discussed as
+  in-scope; search-result cards needing genre names would need either a
+  detail call per result (rejected for the same reason eager stream
+  resolution was rejected — see Known Limitations) or a local
+  id→name genre map built from TMDB's `/genre/movie/list` /
+  `/genre/tv/list` endpoints (not fetched anywhere yet).
+
+## Session 30 — What Was Done
+
+**Scope confirmed with Dia up front:** the real `MetadataProvider` was
+chosen from Session 29's three carried-forward candidates, correctly
+identified as the actual remaining blocker for both free-text search and
+for `searchByMedia()`/Torrentio to ever run against real data.
+
+**Credential decided with Dia:** TMDB v4 Read Access Token (Bearer JWT),
+not the v3 API key — chosen specifically because it never appears in a
+URL, so it can't leak into logs, proxy records, or CI logs by accident.
+
+**Architectural decision made and confirmed with Dia before any code was
+written — `Media.id`'s meaning, previously undefined in code:** tracing
+`MediaRepositoryImpl.getMediaDetails()` found it already hardcoded
+`idType = ExternalIdType.IMDB`, implicitly assuming `Media.id == imdbId`
+— but this had never actually been exercised against a real provider
+before this session, so the assumption was silently wrong and undetected
+until now. TMDB's `search/multi` returns TMDB's own numeric ids natively;
+IMDb ids are only obtainable from TMDB's detail endpoints. Discussed the
+tradeoff directly with Dia: TMDB id was chosen as `Media.id`'s permanent,
+canonical meaning app-wide, since it requires no extra resolve step for
+search results (IMDb id would have required an extra detail call per
+search result just to populate `Media.id` at all). This is a real,
+load-bearing decision — noted explicitly rather than buried in a diff,
+since it affects cache keys, Continue Watching, nav args, Details, and
+Player, even though none of those call sites needed code changes this
+session (they already treat `Media.id` as an opaque string).
+
+**Second design decision made and confirmed with Dia — free-text Search
+results do NOT eagerly resolve Torrentio streams:** initially proposed
+otherwise per Dia's first answer, but walked through the real cost
+(TMDB search/multi doesn't return `imdbId`; getting it requires a
+per-result detail call; then a per-result Torrentio `searchByMedia()`
+call — roughly 2N+1 network calls per search, against a provider already
+documented as periodically flaky) and Dia switched to resolve-on-tap.
+Confirmed this path already exists end-to-end with zero new code needed
+— `DetailsViewModel`'s `onPlayMovie`/`onPlayEpisode` already navigate by
+`mediaId`/`episodeId` only, and `PlayerViewModel` (Session 27) already
+resolves `Media` and calls `ResolvePlaybackUseCase` (Session 29's
+`searchStreamsByMedia()` path) itself on init — this session's
+`TmdbMetadataProvider` is the only missing piece that was blocking this
+already-built flow from working against real data.
+
+**TMDB API shapes verified via web search before writing any DTOs, not
+assumed from training data** (training data on a specific third-party
+API's current wire format is exactly the kind of thing that goes stale):
+confirmed `append_to_response` only works on detail endpoints, never on
+search endpoints; confirmed movies get `imdb_id` at the top level with no
+append needed while TV requires `append_to_response=external_ids` for
+it, nested under a separate object (one contradicting 2021-era forum post
+was weighed against TMDB's own current reference docs and a same-year
+forum confirmation, and set aside as outdated); confirmed `search/multi`
+field names (`media_type`, `title`/`name`, `release_date`/
+`first_air_date`); confirmed `/tv/{id}/season/{n}` returns a full
+`episodes` array in one call, unpaginated.
+
+**Files created:**
+- **`provider/metadata/tmdb/TmdbDto.kt`** — `@Serializable` response
+  DTOs: `TmdbSearchResultDto` (single shape for movie/TV/person search
+  hits, disambiguated by `mediaType` at mapping time — not a sealed
+  hierarchy, not worth the polymorphic serialization complexity for this
+  few fields), `TmdbExternalIdsDto`, `TmdbMovieDetailsDto`,
+  `TmdbTvDetailsDto`, `TmdbGenreDto`, `TmdbSeasonDto`, `TmdbEpisodeDto`.
+  Movie and TV detail DTOs shaped differently on purpose (see the
+  `imdb_id` asymmetry above), not for stylistic consistency. Corrected
+  mid-session to add a missing `numberOfSeasons` field (see "mistakes"
+  below).
+- **`provider/metadata/tmdb/TmdbApi.kt`** — Retrofit interface:
+  `searchMulti()`, `getMovieDetails()`, `getTvDetails()`, `getTvSeason()`.
+  `appendToResponse` defaults to `"external_ids"` on both detail calls.
+  Auth intentionally not handled here — applied by an OkHttp interceptor
+  instead, keeping this interface a pure wire-contract description.
+- **`provider/metadata/tmdb/TmdbMetadataProvider.kt`** — real
+  `MetadataProvider` implementation. `fetchMediaDetails()` only accepts
+  `idType == TMDB` (returns `NotFound` otherwise — `resolveExternalId()`
+  is the missing path that would convert other id types, not
+  implemented this session, see Known Limitations); tries `/movie/{id}`
+  first, falls back to `/tv/{id}` on 404. `fetchEpisodes(season = null)`
+  fetches all seasons via an N+1 call pattern (see Known Limitations).
+  `searchMedia()` filters `search/multi` results to `movie`/`tv` only,
+  always sets `imdbId = null` (real API constraint, not a bug). Same
+  `HttpException`/`IOException`/`SerializationException` → `ProviderError`
+  mapping convention as `TorrentioSearchProvider` (Session 29).
+
+**Files modified:**
+- **`provider/metadata/MetadataProvider.kt`** — added `searchMedia(
+  query): ProviderResult<List<Media>>` to the interface, with a doc
+  comment explaining why this lives here (a title-catalog lookup, same
+  kind of operation as `fetchMediaDetails()` just keyed by text) rather
+  than on `SearchProvider` (which owns stream/torrent discovery, a
+  genuinely different capability — see `TorrentioSearchProvider`'s own
+  doc comment on why it can't do free-text at all).
+- **`provider/metadata/StubMetadataProvider.kt`** — added a matching
+  `searchMedia()` override (also fails); no longer Hilt-bound as of this
+  session, kept as a reference/fallback implementation.
+- **`data/repository/MediaRepositoryImpl.kt`** — three edits: (1)/(2)
+  fixed a real pre-existing bug in `getMediaDetails()` and
+  `getEpisodes()`, both hardcoded to `ExternalIdType.IMDB`, changed to
+  `ExternalIdType.TMDB` to match this session's `Media.id` decision —
+  this bug had never been caught before because no real provider had
+  ever exercised this code path; (3) `search()` rewired from
+  `searchProvider.search()` (Torrentio, permanently `NotFound`) to
+  `metadataProvider.searchMedia()` (TMDB), mapping each returned `Media`
+  to a `SearchResult` with `candidates = emptyList()` — deliberate, not
+  a placeholder (see the eager-vs-on-tap decision above).
+- **`di/NetworkModule.kt`** — added a `@TmdbOkHttpClient`-qualified
+  `OkHttpClient` carrying a new private `AuthInterceptor` (adds
+  `Authorization: Bearer <BuildConfig.TMDB_READ_ACCESS_TOKEN>` to every
+  request), a `@TmdbRetrofit`-qualified `Retrofit` instance pointed at
+  `https://api.themoviedb.org/3/`, and `TmdbApi`. Deliberately a
+  *separate* `OkHttpClient` from Torrentio's — an auth header meant for
+  TMDB must never reach Torrentio (keyless) or any future differently-
+  authed provider, and vice versa. Extracted the shared
+  `HttpLoggingInterceptor` into its own `@Provides` function so both
+  clients reuse one instance rather than constructing separate ones —
+  flagged as a real, if low-risk, restructuring of existing Session 29
+  code, not just an addition.
+- **`di/ProviderModule.kt`** — `bindMetadataProvider()` now binds
+  `TmdbMetadataProvider` instead of `StubMetadataProvider`.
+- **`app/build.gradle.kts`** — added `local.properties` reading logic
+  (see "Build Configuration" section above), `buildConfigField` for
+  `TMDB_READ_ACCESS_TOKEN`, and `buildFeatures.buildConfig = true`.
+- **`.github/workflows/build.yml`** — added a "Write local.properties"
+  step. Required a real fix mid-session (see "mistakes" below) to move
+  it before, not after, the Gradle-wrapper-regeneration step.
+
+**Four real mistakes this session — all caught before being treated as
+done, consistent with this project's standing verification practice:**
+
+1. **`TmdbDto.kt`'s `TmdbTvDetailsDto` was missing a `numberOfSeasons`
+   field** that `TmdbMetadataProvider.kt` (written and presented
+   immediately after) referenced for its "all seasons" episode-fetch
+   logic. Caught by re-reading the two files together before Dia pasted
+   either, not after a compile failure — a real design-time cross-file
+   mistake on Claude's part, fixed via a small find/replace on
+   `TmdbDto.kt` before `TmdbMetadataProvider.kt` was presented as ready.
+2. **`.github/workflows/build.yml`'s step order was wrong from the
+   start** — "Write local.properties" was placed after "Regenerate
+   Gradle wrapper" (a step that, as it turns out, itself evaluates
+   `build.gradle.kts` and therefore needs the token to already exist).
+   This produced a confusing failure: the first CI run's error
+   ("Missing TMDB_READ_ACCESS_TOKEN") looked exactly like a secret-
+   configuration problem on Dia's end, and required real debugging (an
+   Actions API rate-limit, then reading a misleading annotation-only
+   summary, then finally the raw step log) to find the true cause — a
+   design mistake in the workflow file Claude wrote, not anything Dia
+   did wrong. Fixed by moving the step to immediately after checkout.
+3. **A subsequent find/replace-by-description on `build.yml` produced a
+   YAML parse error** — a missing indent on the `Checkout code` step and
+   a duplicated `-` on the `Grant execute permission` step, causing the
+   workflow to fail to parse entirely (instant failure, several steps
+   greyed out) rather than fail partway through a step. Caught by Dia
+   pasting the actual file content for review rather than assuming the
+   edit landed correctly. Fixed via a full-file replacement (select-all-
+   delete, paste fresh) rather than another targeted edit.
+4. Two GitHub Actions API rate-limit hits during debugging, worked
+   around the standard way (direct run/job URL via `web_fetch`,
+   consistent with Sessions 27–29).
+
+**Build verification:** final push verified green via direct job URL:
+`github.com/diaviloai/Onedebrid/actions/runs/33456443813/job/99697300273`
+— job "build" succeeded in 4m 21s. All annotations on that run
+(13 warnings) confirmed to be GitHub infrastructure noise (Gradle cache-
+service 400s/outage messages, Node.js 20/setup-java v4 deprecation
+notices) by checking the job's actual top-level status line, not
+inferred from the annotation list alone — same standing lesson as
+Sessions 27–29, reapplied correctly. All ten touched/created files were
+re-pulled fresh after the final push and spot-checked (Hilt bindings,
+`idType` fixes, `search()` rewiring, `numberOfSeasons` field) against
+intended content — all matched, no mismatches found.
 
 At the end of the next session, update currentsprint.md (full file, in
 a code block, chunked into sequential pastes if it's likely to exceed
