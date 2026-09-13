@@ -282,7 +282,9 @@ private fun EpisodeList(
             }
         }
     }
-}@Composable
+}
+
+@Composable
 private fun EpisodeRow(
     episode: Episode,
     onClick: () -> Unit,
