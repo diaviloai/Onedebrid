@@ -39,6 +39,11 @@
     <string name="details_no_episodes">No episodes found</string>
     <string name="details_season_header">Season %1$d</string>
     <string name="details_episode_fallback_title">Episode %1$d</string>
+    <string name="details_choose_stream">Choose a stream</string>
+    <string name="details_picker_title">Available streams</string>
+    <string name="details_picker_empty">No streams found for this title</string>
+    <string name="details_picker_seeders">%1$d seeders</string>
+    <string name="details_picker_error_generic">Couldn\'t load streams. Please try again.</string>
 
     <!-- Settings / Profile screen -->
     <string name="settings_title">Settings</string>

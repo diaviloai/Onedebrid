@@ -1,5 +1,7 @@
 package com.onedebrid.app.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Represents a single result returned by the Search system.
  *
@@ -33,7 +35,18 @@ data class SearchResult(
  * sizeBytes: File size in bytes if available from the search provider.
  * seeders: Seeder count where available. Not meaningful after debrid resolution.
  * quality: Quality parsed from the release title. May be UNKNOWN.
+ *
+ * @Serializable (stream-candidate picker feature): a manually-picked
+ * StreamCandidate needs to travel from DetailsViewModel to PlayerViewModel
+ * as PlaybackRequest.preferredSource. Nav args (Navigation Compose) cannot
+ * carry a domain object directly — only primitives/strings — so a picked
+ * candidate is JSON-encoded via kotlinx.serialization and carried as an
+ * optional nav-arg string on Route.Player, then decoded back into a
+ * StreamCandidate by PlayerViewModel. VideoQuality (the one non-primitive
+ * field here) was made @Serializable for the same reason — see
+ * StreamSource.kt.
  */
+@Serializable
 data class StreamCandidate(
     val title: String,
     val hash: String? = null,

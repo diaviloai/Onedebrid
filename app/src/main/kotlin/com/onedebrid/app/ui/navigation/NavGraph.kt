@@ -1,5 +1,6 @@
 package com.onedebrid.app.ui.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -8,11 +9,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.ui.details.DetailsScreen
 import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
 import com.onedebrid.app.ui.settings.SettingsScreen
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 /**
  * Route identifiers for the app's navigation graph.
@@ -47,8 +51,9 @@ sealed class Route(val path: String) {
     }
 
     /**
-     * Player takes mediaId, an optional episodeId, and an optional
-     * resumeMs, all as nav args (Session 27) — replacing
+     * Player takes mediaId, an optional episodeId, an optional resumeMs,
+     * and (stream-candidate picker feature) an optional preferredSource,
+     * all as nav args (Session 27, extended this session) — replacing
      * PendingPlaybackHolder, which was an in-memory singleton that did not
      * survive process death (see that file's former doc comment, and
      * currentsprint.md's Session 27 notes for the full before/after
@@ -66,15 +71,42 @@ sealed class Route(val path: String) {
      * PlayerViewModel reads them, since that's where the mapping back to
      * null actually happens.
      *
-     * build() takes nullable episodeId/resumeMs directly so call sites
-     * never need to know about the sentinel values themselves — only this
-     * file and PlayerViewModel's SavedStateHandle-reading code do.
+     * preferredSource follows the same sentinel pattern, extended one step
+     * further: nav args can only carry primitives/strings, never a domain
+     * object directly (see PlayerNavArgs.kt's doc comment), so a
+     * StreamCandidate is JSON-encoded (kotlinx.serialization) into a
+     * String, then that String is percent-encoded via Uri.encode() so
+     * JSON's own reserved characters ({, }, ", :, etc.) survive as a
+     * single opaque query-arg value rather than being misread as route
+     * syntax. The sentinel for "no candidate" is the empty string ""
+     * (distinct from "none", which is already used for episodeId's
+     * distinct sentinel meaning) — an empty string can never be valid
+     * encoded JSON, so it is unambiguous. Decoded and deserialized back
+     * into a StreamCandidate? by PlayerViewModel using the exact reverse
+     * steps (Uri.decode() then Json.decodeFromString()), returning null
+     * on either an empty string or (defensively) a decode failure.
+     *
+     * build() takes a nullable StreamCandidate directly, same as
+     * episodeId/resumeMs — call sites (DetailsViewModel/HomeViewModel)
+     * only ever deal in domain objects, never nav-arg wire format; only
+     * this file and PlayerViewModel's SavedStateHandle-reading code know
+     * the sentinels/encoding exist.
      */
-    data object Player : Route("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}") {
-        fun build(mediaId: String, episodeId: String? = null, resumeMs: Long? = null): String {
+    data object Player :
+        Route("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}&preferredSource={preferredSource}") {
+        fun build(
+            mediaId: String,
+            episodeId: String? = null,
+            resumeMs: Long? = null,
+            preferredSource: StreamCandidate? = null
+        ): String {
             val episodeArg = episodeId ?: "none"
             val resumeArg = resumeMs ?: -1L
-            return "player/$mediaId?episodeId=$episodeArg&resumeMs=$resumeArg"
+            val preferredSourceArg = preferredSource
+                ?.let { Uri.encode(Json.encodeToString(it)) }
+                ?: ""
+            return "player/$mediaId?episodeId=$episodeArg&resumeMs=$resumeArg" +
+                "&preferredSource=$preferredSourceArg"
         }
     }
 }
@@ -139,8 +171,10 @@ fun NavGraph(
                 onNavigateToSettings = {
                     navController.navigate(Route.Settings.path)
                 },
-                onNavigateToPlayer = { mediaId, episodeId, resumeMs ->
-                    navController.navigate(Route.Player.build(mediaId, episodeId, resumeMs))
+                onNavigateToPlayer = { mediaId, episodeId, resumeMs, preferredSource ->
+                    navController.navigate(
+                        Route.Player.build(mediaId, episodeId, resumeMs, preferredSource)
+                    )
                 }
             )
         }
@@ -156,6 +190,10 @@ fun NavGraph(
                 navArgument("resumeMs") {
                     type = NavType.LongType
                     defaultValue = -1L
+                },
+                navArgument("preferredSource") {
+                    type = NavType.StringType
+                    defaultValue = ""
                 }
             )
         ) {
@@ -179,8 +217,10 @@ fun NavGraph(
             arguments = listOf(navArgument("mediaId") { type = NavType.StringType })
         ) {
             DetailsScreen(
-                onNavigateToPlayer = { mediaId, episodeId, resumeMs ->
-                    navController.navigate(Route.Player.build(mediaId, episodeId, resumeMs))
+                onNavigateToPlayer = { mediaId, episodeId, resumeMs, preferredSource ->
+                    navController.navigate(
+                        Route.Player.build(mediaId, episodeId, resumeMs, preferredSource)
+                    )
                 },
                 onNavigateBack = {
                     navController.popBackStack()

@@ -32,6 +32,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.WatchedItem
 import kotlinx.coroutines.flow.collectLatest
 
@@ -68,13 +69,26 @@ import kotlinx.coroutines.flow.collectLatest
  * left in place with the same "flag rather than silently orphan" handling
  * already established for search_tv_show_unsupported (see that string's
  * own comment in strings.xml and currentsprint.md's Open TODOs).
+ *
+ * [onNavigateToPlayer] gained a fourth parameter this session
+ * (stream-candidate picker feature) — preferredSource, matching
+ * PlayerNavArgs.preferredSource and Route.Player.build()'s new signature.
+ * Continue Watching's tap-to-resume flow has no manual-pick context (it
+ * never had a picker UI, and still doesn't), so navArgs.preferredSource
+ * here is always null — passed through unchanged rather than hardcoded,
+ * so this call site stays correct automatically if that ever changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToPlayer: (mediaId: String, episodeId: String?, resumeMs: Long?) -> Unit,
+    onNavigateToPlayer: (
+        mediaId: String,
+        episodeId: String?,
+        resumeMs: Long?,
+        preferredSource: StreamCandidate?
+    ) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -82,7 +96,12 @@ fun HomeScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.navigateToPlayer.collectLatest { navArgs ->
-            onNavigateToPlayer(navArgs.mediaId, navArgs.episodeId, navArgs.resumeMs)
+            onNavigateToPlayer(
+                navArgs.mediaId,
+                navArgs.episodeId,
+                navArgs.resumeMs,
+                navArgs.preferredSource
+            )
         }
     }
 

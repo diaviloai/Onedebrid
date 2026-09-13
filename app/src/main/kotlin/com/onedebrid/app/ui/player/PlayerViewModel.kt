@@ -1,5 +1,6 @@
 package com.onedebrid.app.ui.player
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -11,6 +12,7 @@ import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.usecase.EndPlaybackSessionUseCase
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
@@ -27,6 +29,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 /**
@@ -53,12 +58,14 @@ import javax.inject.Inject
  *   episodeId was actually passed
  * - The active profile via GetActiveProfileUseCase(), same pattern
  *   DetailsViewModel/HomeViewModel already use
- * preferredSource is NOT resolvable this way — nothing in the app produces
- * a pre-selected StreamCandidate yet (that's the stream-candidate picker
- * UI, a separate not-yet-built feature). PlaybackRequest.preferredSource
- * is always null here, same as it already was for every existing caller
- * (HomeViewModel, DetailsViewModel) before this change — this is not a
- * regression, just an explicitly acknowledged gap that was already true.
+ * preferredSource is resolved from the "preferredSource" nav arg (stream-
+ * candidate picker feature, added after Session 30) — see
+ * decodePreferredSource() below for the JSON-decode + Uri.decode() steps
+ * that mirror Route.Player.build()'s encoding in NavGraph.kt. Still null
+ * for HomeViewModel's Continue Watching flow and for any Details Play tap
+ * that didn't go through the picker sheet — this was true for every
+ * caller before this feature and remains the default; only a deliberate
+ * manual pick produces a non-null value here.
  *
  * This resolve step happens once, in resolveAndPlay(), called from
  * init{}. It is a NEW phase that did not exist before Session 27 — there
@@ -103,6 +110,16 @@ class PlayerViewModel @Inject constructor(
         (savedStateHandle["episodeId"] as? String)?.takeIf { it != "none" }
     private val resumePositionMs: Long? =
         (savedStateHandle["resumeMs"] as? Long)?.takeIf { it != -1L }
+
+    // preferredSource (stream-candidate picker feature): "" is the
+    // sentinel Route.Player.build() encodes absence as (see that file's
+    // doc comment on Route.Player — an empty string can never be valid
+    // encoded JSON, so it's unambiguous as a sentinel). Decoded once here,
+    // at construction, same as episodeId/resumePositionMs above, so the
+    // rest of this class only ever deals with a real StreamCandidate? —
+    // never the raw nav-arg string.
+    private val preferredSource: StreamCandidate? =
+        decodePreferredSource(savedStateHandle["preferredSource"] as? String)
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -195,7 +212,7 @@ class PlayerViewModel @Inject constructor(
             val request = PlaybackRequest(
                 media = media,
                 episode = episode,
-                preferredSource = null,
+                preferredSource = preferredSource,
                 resumePositionMs = resumePositionMs
             )
             playbackCoordinator.play(request, profile.id)
@@ -220,6 +237,13 @@ class PlayerViewModel @Inject constructor(
      * already-resolved Media/Episode/profile rather than re-resolving them.
      * Called by PlayerScreen's ErrorContent when coordinatorState is
      * Error and resolveState is Resolved (see PlayerScreen.kt).
+     *
+     * Reuses this ViewModel's preferredSource field (stream-candidate
+     * picker feature) rather than hardcoding null, so a retry after a
+     * failed manual pick retries that same candidate instead of silently
+     * falling back to Smart Defaults — the user picked a specific stream
+     * on purpose; a retry should honor that choice, not quietly abandon
+     * it.
      */
     fun retryPlay() {
         val profileId = activeProfileId ?: return
@@ -232,7 +256,7 @@ class PlayerViewModel @Inject constructor(
             val request = PlaybackRequest(
                 media = media,
                 episode = episode,
-                preferredSource = null,
+                preferredSource = preferredSource,
                 resumePositionMs = resumePositionMs
             )
             playbackCoordinator.play(request, profileId)
@@ -340,6 +364,32 @@ class PlayerViewModel @Inject constructor(
 }
 
 private const val POSITION_SAVE_INTERVAL_MS = 5_000L
+
+/**
+ * Decodes the "preferredSource" nav-arg string back into a StreamCandidate?
+ * (stream-candidate picker feature). Reverses exactly what
+ * Route.Player.build() does in NavGraph.kt: Uri.decode() undoes the
+ * percent-encoding, then Json.decodeFromString() parses the JSON back into
+ * a StreamCandidate.
+ *
+ * Returns null for the empty-string sentinel (Route.Player's "no candidate"
+ * marker — see that file's doc comment) and, defensively, for a raw nav
+ * arg of null (shouldn't happen given the route's defaultValue = "", but
+ * SavedStateHandle reads are inherently untyped/nullable at the call site)
+ * or a SerializationException. A decode failure here is not expected in
+ * practice — the only producer of this string is Route.Player.build()
+ * itself — but resolveAndPlay() treating a corrupt/unexpected value as "no
+ * manual pick" and falling back to Smart Defaults is a safer failure mode
+ * than crashing the Player screen outright.
+ */
+private fun decodePreferredSource(rawArg: String?): StreamCandidate? {
+    if (rawArg.isNullOrEmpty()) return null
+    return try {
+        Json.decodeFromString<StreamCandidate>(Uri.decode(rawArg))
+    } catch (e: SerializationException) {
+        null
+    }
+}
 
 /**
  * Tracks the Session 27 resolve phase — Media/Episode/active-profile

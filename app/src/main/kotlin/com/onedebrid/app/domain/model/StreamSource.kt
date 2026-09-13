@@ -1,5 +1,7 @@
 package com.onedebrid.app.domain.model
 
+import kotlinx.serialization.Serializable
+
 /**
  * Represents a resolved, playable stream for a piece of media.
  *
@@ -27,7 +29,16 @@ data class StreamSource(
  *
  * UNKNOWN is used when quality cannot be determined from available metadata.
  * This prevents null handling at call sites while still representing uncertainty.
+ *
+ * @Serializable added (stream-candidate picker feature) so StreamCandidate,
+ * which carries a VideoQuality field, can itself be @Serializable — needed
+ * to encode a manually-picked StreamCandidate as a nav argument between
+ * Details and Player (nav args can only carry primitives/strings, so the
+ * candidate travels as a JSON string). StreamSource itself is NOT made
+ * @Serializable here — it never crosses a nav-arg boundary, only
+ * StreamCandidate does (see PlaybackRequest.preferredSource).
  */
+@Serializable
 enum class VideoQuality {
     SD,
     HD_720,

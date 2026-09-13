@@ -8,9 +8,11 @@ import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.ui.navigation.PlayerNavArgs
 import com.onedebrid.app.usecase.GetEpisodesUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
+import com.onedebrid.app.usecase.GetStreamCandidatesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -39,6 +41,15 @@ import javax.inject.Inject
  *
  * [episodes] / [isLoadingEpisodes] / [episodesError] only apply once [media]
  * has loaded successfully and its type is TV_SHOW — see loadMedia().
+ *
+ * [picker] (stream-candidate picker feature) is tracked as its own
+ * PickerUiState below, deliberately NOT nested inside this data class's
+ * other fields — it is a fully independent lifecycle (closed/loading/
+ * loaded/error) that can open and close repeatedly over this screen's
+ * lifetime, unlike [media]/[episodes] which each load once. Kept as a
+ * sibling field for the same "don't force an unrelated concern through a
+ * shared state machine" reasoning already used for episodes vs. media
+ * above.
  */
 data class DetailsUiState(
     val media: Media? = null,
@@ -46,8 +57,37 @@ data class DetailsUiState(
     val mediaError: AppError? = null,
     val episodes: List<Episode> = emptyList(),
     val isLoadingEpisodes: Boolean = false,
-    val episodesError: AppError? = null
+    val episodesError: AppError? = null,
+    val picker: PickerUiState = PickerUiState.Closed
 )
+
+/**
+ * State for the manual stream-candidate picker sheet (added after Session
+ * 30, the feature flagged as Next Step #1 in that session's handoff).
+ *
+ * Closed: the default. The picker sheet is not shown.
+ * Loading: onChooseStream() was called; GetStreamCandidatesUseCase is in
+ * flight. [episode] is carried through from the call that triggered this,
+ * so Loaded/Error (and eventually onCandidateSelected()) know which target
+ * — the movie itself, or which specific TV episode — the candidates being
+ * fetched/shown apply to, without a separate stored field on the
+ * ViewModel. null [episode] means the picker was opened for a
+ * MediaType.MOVIE (mirrors onPlayMovie/onPlayEpisode's own null-episode-id
+ * convention below).
+ * Loaded: candidates fetched successfully. May be an empty list — an
+ * empty list and Error are deliberately distinct states (mirrors
+ * RepositoryResult's own success/failure split): an empty list means the
+ * search legitimately found nothing, an Error means the search itself
+ * failed. DetailsScreen renders each differently (see that file).
+ * Error: GetStreamCandidatesUseCase failed. Retry re-runs onChooseStream()
+ * for the same [episode].
+ */
+sealed interface PickerUiState {
+    data object Closed : PickerUiState
+    data class Loading(val episode: Episode?) : PickerUiState
+    data class Loaded(val episode: Episode?, val candidates: List<StreamCandidate>) : PickerUiState
+    data class Error(val episode: Episode?, val error: AppError) : PickerUiState
+}
 
 /**
  * ViewModel for the Details / Episode-picker screen (Session 26).
@@ -84,12 +124,30 @@ data class DetailsUiState(
  * PlayerViewModel.kt). This ViewModel therefore no longer needs
  * GetActiveProfileUseCase or PendingPlaybackHolder (the latter deleted
  * this session) at all.
+ *
+ * Stream-candidate picker feature (added after Session 30): Play remains
+ * the primary, one-tap action (onPlayMovie/onPlayEpisode, unchanged,
+ * still emit preferredSource = null so PlayerViewModel resolves Smart
+ * Defaults) — per the discussed and confirmed design, manual picking is a
+ * deliberate override, not a replacement, preserving Project_Design.md's
+ * "Zero-Click to Content" / Smart Defaults principles. onChooseStream()
+ * opens a separate sheet (see [picker] on DetailsUiState /
+ * DetailsScreen.kt) fetching the same StreamCandidate list
+ * ResolvePlaybackUseCase.resolveSmartDefault() already draws from
+ * (GetStreamCandidatesUseCase, a thin wrapper over
+ * MediaRepository.searchStreamsByMedia() — see that Use Case's own doc
+ * comment for why it exists as a separate small file). Selecting a
+ * candidate (onCandidateSelected()) emits the same [navigateToPlayer]
+ * event as Play, just with preferredSource set — PlayerViewModel then
+ * hands that exact candidate to PlaybackCoordinator.play() instead of
+ * resolving one itself (see PlayerViewModel.resolveAndPlay()).
  */
 @HiltViewModel
 class DetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getMediaByIdUseCase: GetMediaByIdUseCase,
-    private val getEpisodesUseCase: GetEpisodesUseCase
+    private val getEpisodesUseCase: GetEpisodesUseCase,
+    private val getStreamCandidatesUseCase: GetStreamCandidatesUseCase
 ) : ViewModel() {
 
     private val mediaId: String = checkNotNull(savedStateHandle["mediaId"]) {
@@ -176,6 +234,11 @@ class DetailsViewModel @Inject constructor(
      * resume-from-here, but that's out of scope for this session (see
      * currentsprint.md Session 26 notes — unchanged reasoning as of
      * Session 27).
+     *
+     * preferredSource = null (explicit, not just the default arg) — Play
+     * always means Smart Default, per the stream-candidate picker
+     * feature's confirmed design. A manual pick only ever happens via
+     * onCandidateSelected() below.
      */
     fun onPlayMovie() {
         val media = _uiState.value.media ?: return
@@ -183,14 +246,16 @@ class DetailsViewModel @Inject constructor(
             PlayerNavArgs(
                 mediaId = media.id,
                 episodeId = null,
-                resumeMs = null
+                resumeMs = null,
+                preferredSource = null
             )
         )
     }
 
     /**
-     * Play a specific episode of a MediaType.TV_SHOW. Same no-op guard and
-     * same "always starts from the beginning" caveat as onPlayMovie().
+     * Play a specific episode of a MediaType.TV_SHOW. Same no-op guard,
+     * same "always starts from the beginning" caveat, and same explicit
+     * preferredSource = null as onPlayMovie().
      */
     fun onPlayEpisode(episode: Episode) {
         val media = _uiState.value.media ?: return
@@ -198,7 +263,97 @@ class DetailsViewModel @Inject constructor(
             PlayerNavArgs(
                 mediaId = media.id,
                 episodeId = episode.id,
-                resumeMs = null
+                resumeMs = null,
+                preferredSource = null
+            )
+        )
+    }
+
+    /**
+     * Opens the stream-candidate picker sheet and fetches candidates.
+     *
+     * [episode] null means "picking for the movie itself" (or, for a TV
+     * show, this method is not expected to be called without an episode —
+     * DetailsScreen only exposes a "choose a stream" affordance once a
+     * specific episode row is in context, same as onPlayEpisode requiring
+     * one; there is no top-level "choose a stream for this show" action
+     * since a show has no single stream). Carried through into every
+     * PickerUiState variant so onCandidateSelected() knows which
+     * episodeId (if any) to attach to the resulting nav args without a
+     * separate stored field.
+     *
+     * No no-op guard on media being loaded: this is only ever reachable
+     * from a Play-adjacent affordance that itself only renders once media
+     * has loaded (mirrors onPlayMovie/onPlayEpisode's own assumption,
+     * enforced by DetailsScreen's layout rather than re-checked here).
+     */
+    fun onChooseStream(episode: Episode? = null) {
+        val media = _uiState.value.media ?: return
+        _uiState.value = _uiState.value.copy(picker = PickerUiState.Loading(episode))
+        viewModelScope.launch {
+            when (val result = getStreamCandidatesUseCase(media, episode)) {
+                is RepositoryResult.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        picker = PickerUiState.Loaded(episode, result.data)
+                    )
+                }
+
+                is RepositoryResult.Failure -> {
+                    _uiState.value = _uiState.value.copy(
+                        picker = PickerUiState.Error(episode, result.error)
+                    )
+                }
+            }
+        }
+    }
+
+    /** Retry after a failed candidate fetch — re-runs it for the same episode. */
+    fun retryChooseStream() {
+        val currentPicker = _uiState.value.picker
+        val episode = when (currentPicker) {
+            is PickerUiState.Error -> currentPicker.episode
+            is PickerUiState.Loading -> currentPicker.episode
+            is PickerUiState.Loaded -> currentPicker.episode
+            PickerUiState.Closed -> null
+        }
+        onChooseStream(episode)
+    }
+
+    /**
+     * Closes the picker sheet without selecting anything — e.g. the user
+     * dismisses it (scrim tap, back gesture, explicit close button).
+     */
+    fun onDismissPicker() {
+        _uiState.value = _uiState.value.copy(picker = PickerUiState.Closed)
+    }
+
+    /**
+     * User manually selected [candidate] from the picker sheet. Emits the
+     * same [navigateToPlayer] event Play uses, but with preferredSource
+     * set — PlayerViewModel then hands this exact candidate to
+     * PlaybackCoordinator.play() instead of resolving one itself (see
+     * PlayerViewModel.resolveAndPlay()). The episodeId is read from
+     * PickerUiState.Loaded (the only state this method is expected to be
+     * called from — DetailsScreen only shows selectable candidates in that
+     * state) rather than re-passed as a parameter, so the caller can't
+     * accidentally mismatch which episode a candidate was actually fetched
+     * for. No-ops if picker isn't in Loaded state, or if media hasn't
+     * loaded (mirrors onPlayMovie/onPlayEpisode's guard).
+     *
+     * Closes the picker sheet as part of the same state update that emits
+     * navigation, so there's no visible frame where the sheet is still
+     * open while navigation is already underway.
+     */
+    fun onCandidateSelected(candidate: StreamCandidate) {
+        val media = _uiState.value.media ?: return
+        val loadedPicker = _uiState.value.picker as? PickerUiState.Loaded ?: return
+        _uiState.value = _uiState.value.copy(picker = PickerUiState.Closed)
+        _navigateToPlayer.trySend(
+            PlayerNavArgs(
+                mediaId = media.id,
+                episodeId = loadedPicker.episode?.id,
+                resumeMs = null,
+                preferredSource = candidate
             )
         )
     }
