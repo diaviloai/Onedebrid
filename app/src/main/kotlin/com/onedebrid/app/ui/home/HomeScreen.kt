@@ -81,17 +81,13 @@ import kotlinx.coroutines.flow.collectLatest
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    onNavigateToDetails: (MediaType, String, Long?) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToPlayer: (
-        mediaId: String,
-        episodeId: String?,
-        resumeMs: Long?,
-        preferredSource: StreamCandidate?
-    ) -> Unit,
-    modifier: Modifier = Modifier,
+    onNavigateToPlayer: (MediaType, String, String?, String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
+
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(viewModel) {
@@ -118,17 +114,20 @@ fun HomeScreen(
             }
         )
 
-        Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize()) {
             when {
                 uiState.isLoading -> LoadingContent()
                 uiState.continueWatching.isEmpty() -> EmptyContent()
                 else -> ContinueWatchingList(
                     items = uiState.continueWatching,
-                    onItemClick = viewModel::onItemClick,
+                    onItemClick = { item ->
+                        onNavigateToDetails(MediaType.MOVIE, item.mediaId, item.positionMs)
+                    },
                     onRemove = viewModel::removeItem
                 )
             }
         }
+
     }
 }
 
