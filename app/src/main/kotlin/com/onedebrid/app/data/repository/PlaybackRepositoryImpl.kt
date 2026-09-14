@@ -14,6 +14,8 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val COMPLETION_THRESHOLD_RATIO = 0.90f
+
 @Singleton
 class PlaybackRepositoryImpl @Inject constructor(
     private val continueWatchingDao: ContinueWatchingDao,
@@ -46,18 +48,28 @@ class PlaybackRepositoryImpl @Inject constructor(
         positionMs: Long,
         durationMs: Long
     ): Unit = withContext(dispatchers.io) {
-        val entity = ContinueWatchingEntity(
-            profileId = profileId,
-            mediaId = mediaId,
-            episodeId = episodeId,
-            seasonNumber = seasonNumber,
-            episodeNumber = episodeNumber,
-            positionMs = positionMs,
-            durationMs = durationMs,
-            lastWatchedAt = System.currentTimeMillis(),
-            isCompleted = false
-        )
-        continueWatchingDao.upsertProgress(entity)
+        val isCompleted = if (durationMs > 0L) {
+            (positionMs.toFloat() / durationMs.toFloat()) >= COMPLETION_THRESHOLD_RATIO
+        } else {
+            false
+        }
+
+        if (isCompleted) {
+            markAsCompleted(profileId, mediaId)
+        } else {
+            val entity = ContinueWatchingEntity(
+                profileId = profileId,
+                mediaId = mediaId,
+                episodeId = episodeId,
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+                positionMs = positionMs,
+                durationMs = durationMs,
+                lastWatchedAt = System.currentTimeMillis(),
+                isCompleted = false
+            )
+            continueWatchingDao.upsertProgress(entity)
+        }
     }
 
     override suspend fun getProgress(
@@ -74,15 +86,15 @@ class PlaybackRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markAsCompleted(
-    profileId: String,
-    mediaId: String
-): Unit = withContext(dispatchers.io) {
-    continueWatchingDao.markAsCompleted(
-        profileId = profileId,
-        mediaId = mediaId,
-        completedAt = System.currentTimeMillis()
-    )
-}
+        profileId: String,
+        mediaId: String
+    ): Unit = withContext(dispatchers.io) {
+        continueWatchingDao.markAsCompleted(
+            profileId = profileId,
+            mediaId = mediaId,
+            completedAt = System.currentTimeMillis()
+        )
+    }
 
     // --- Recently Played ---
 
