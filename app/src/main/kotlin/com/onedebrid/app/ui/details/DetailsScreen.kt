@@ -1,5 +1,8 @@
 package com.onedebrid.app.ui.details
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -21,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -29,7 +35,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
@@ -224,17 +233,22 @@ private fun StreamPickerBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(bottom = 24.dp)
         ) {
             Text(
                 text = "Select Stream",
-                style = MaterialTheme.typography.titleMedium
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
 
             when (pickerState) {
                 is PickerUiState.Loading -> {
-                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
@@ -245,15 +259,23 @@ private fun StreamPickerBottomSheet(
                     )
                 }
                 is PickerUiState.Loaded -> {
-                    LazyColumn {
-                        items(pickerState.candidates) { candidate ->
-                            Button(
-                                onClick = { onCandidateSelected(candidate) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                            ) {
-                                Text(candidate.title)
+                    if (pickerState.candidates.isEmpty()) {
+                        Text(
+                            text = "No streams available for this item.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        ) {
+                            items(pickerState.candidates) { candidate ->
+                                StreamCandidateRow(
+                                    candidate = candidate,
+                                    onClick = { onCandidateSelected(candidate) }
+                                )
                             }
                         }
                     }
@@ -261,6 +283,99 @@ private fun StreamPickerBottomSheet(
                 PickerUiState.Closed -> {}
             }
         }
+    }
+}
+
+@Composable
+private fun StreamCandidateRow(
+    candidate: StreamCandidate,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Quality Badge (e.g. 4K, 1080p, HD)
+                QualityBadge(candidate = candidate)
+
+                // Provider Badge if available (e.g. RealDebrid, TorBox)
+                candidate.providerName?.let { provider ->
+                    Badge(text = provider, isPrimary = false)
+                }
+
+                // File size if available
+                candidate.sizeBytes?.let { size ->
+                    Text(
+                        text = formatFileSize(size),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Clean, primary title
+            Text(
+                text = candidate.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun QualityBadge(candidate: StreamCandidate) {
+    val qualityText = when {
+        candidate.title.contains("2160p", ignoreCase = true) || candidate.title.contains("4K", ignoreCase = true) -> "4K"
+        candidate.title.contains("1080p", ignoreCase = true) -> "1080p"
+        candidate.title.contains("720p", ignoreCase = true) -> "720p"
+        else -> "SD"
+    }
+
+    Badge(text = qualityText, isPrimary = true)
+}
+
+@Composable
+private fun Badge(text: String, isPrimary: Boolean) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(
+                if (isPrimary) MaterialTheme.colorScheme.primaryContainer
+                else MaterialTheme.colorScheme.secondaryContainer
+            )
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isPrimary) MaterialTheme.colorScheme.onPrimaryContainer
+                   else MaterialTheme.colorScheme.onSecondaryContainer
+        )
+    }
+}
+
+private fun formatFileSize(sizeBytes: Long): String {
+    if (sizeBytes <= 0) return ""
+    val gb = sizeBytes.toDouble() / (1024 * 1024 * 1024)
+    return if (gb >= 1.0) {
+        "%.1f GB".format(gb)
+    } else {
+        val mb = sizeBytes.toDouble() / (1024 * 1024)
+        "%.0f MB".format(mb)
     }
 }
 
@@ -278,7 +393,7 @@ private fun ErrorContent(
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onRetry) {
             Text("Retry")
-        } 
+        }
     }
 }
 
