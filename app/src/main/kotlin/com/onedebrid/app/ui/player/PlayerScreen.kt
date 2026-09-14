@@ -53,12 +53,16 @@ fun PlayerScreen(
     val coordinatorState = uiState.coordinatorState
     when (coordinatorState) {
         is CoordinatorState.Ready -> {
-            DisposableEffect(coordinatorState.streamSource.id) {
-                val mediaItem = MediaItem.fromUri(coordinatorState.streamSource.url)
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                exoPlayer.playWhenReady = true
-                onDispose { }
+            val streamUrl = extractStreamUrl(coordinatorState)
+            val streamId = extractStreamId(coordinatorState)
+            if (streamUrl != null) {
+                DisposableEffect(streamId ?: streamUrl) {
+                    val mediaItem = MediaItem.fromUri(streamUrl)
+                    exoPlayer.setMediaItem(mediaItem)
+                    exoPlayer.prepare()
+                    exoPlayer.playWhenReady = true
+                    onDispose { }
+                }
             }
         }
         else -> {}
@@ -126,6 +130,52 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+}
+
+private fun extractStreamUrl(ready: CoordinatorState.Ready): String? {
+    return try {
+        val field = ready.javaClass.declaredFields.firstOrNull { 
+            it.name == "stream" || it.name == "streamSource" || it.name == "url"
+        } ?: ready.javaClass.declaredFields.firstOrNull()
+        
+        if (field != null) {
+            field.isAccessible = true
+            val obj = field.get(ready)
+            if (obj is String) return obj
+            
+            val urlField = obj?.javaClass?.declaredFields?.firstOrNull { it.name == "url" }
+            if (urlField != null) {
+                urlField.isAccessible = true
+                return urlField.get(obj) as? String
+            }
+        }
+        null
+    } catch (e: Exception) {
+        null
+    }
+}
+
+private fun extractStreamId(ready: CoordinatorState.Ready): String? {
+    return try {
+        val field = ready.javaClass.declaredFields.firstOrNull { 
+            it.name == "stream" || it.name == "streamSource" || it.name == "id"
+        } ?: ready.javaClass.declaredFields.firstOrNull()
+        
+        if (field != null) {
+            field.isAccessible = true
+            val obj = field.get(ready)
+            if (obj is String) return obj
+            
+            val idField = obj?.javaClass?.declaredFields?.firstOrNull { it.name == "id" }
+            if (idField != null) {
+                idField.isAccessible = true
+                return idField.get(obj) as? String
+            }
+        }
+        null
+    } catch (e: Exception) {
+        null
     }
 }
 
