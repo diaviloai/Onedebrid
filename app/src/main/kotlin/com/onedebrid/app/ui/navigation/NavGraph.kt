@@ -35,14 +35,12 @@ sealed class Screen(val route: String) {
         ): String {
             val base = "player/${mediaType.name}/$mediaId"
             val params = mutableListOf<String>()
-            if (!episodeId.isNull_Or_Blank()) params.add("episodeId=$episodeId")
-            if (!preferredSource.isNull_Or_Blank()) params.add("preferredSource=$preferredSource")
+            if (!episodeId.isNullOrBlank()) params.add("episodeId=$episodeId")
+            if (!preferredSource.isNullOrBlank()) params.add("preferredSource=$preferredSource")
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
 }
-
-private fun String?.isNull_Or_Blank(): Boolean = this == null || this.isBlank()
 
 @Composable
 fun NavGraph(
