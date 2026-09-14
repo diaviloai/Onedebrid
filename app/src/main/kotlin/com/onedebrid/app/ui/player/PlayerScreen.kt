@@ -30,7 +30,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.ui.player.PlayerViewModel.*
 
 @Composable
 fun PlayerScreen(
@@ -51,7 +50,7 @@ fun PlayerScreen(
 
     val coordinatorState = uiState.coordinatorState
     when (coordinatorState) {
-        is CoordinatorState.Ready -> {
+        is PlayerViewModel.CoordinatorState.Ready -> {
             DisposableEffect(coordinatorState.stream.id) {
                 val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
                 exoPlayer.setMediaItem(mediaItem)
@@ -67,30 +66,30 @@ fun PlayerScreen(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val mapped = when (playbackState) {
-                    Player.STATE_IDLE -> PlayerLifecycleState.IDLE
-                    Player.STATE_BUFFERING -> PlayerLifecycleState.BUFFERING
+                    Player.STATE_IDLE -> PlayerViewModel.PlayerLifecycleState.IDLE
+                    Player.STATE_BUFFERING -> PlayerViewModel.PlayerLifecycleState.BUFFERING
                     Player.STATE_READY -> {
-                        if (exoPlayer.isPlaying) PlayerLifecycleState.PLAYING else PlayerLifecycleState.PAUSED
+                        if (exoPlayer.isPlaying) PlayerViewModel.PlayerLifecycleState.PLAYING else PlayerViewModel.PlayerLifecycleState.PAUSED
                     }
-                    Player.STATE_ENDED -> PlayerLifecycleState.ENDED
-                    else -> PlayerLifecycleState.IDLE
+                    Player.STATE_ENDED -> PlayerViewModel.PlayerLifecycleState.ENDED
+                    else -> PlayerViewModel.PlayerLifecycleState.IDLE
                 }
                 viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 val mapped = if (isPlaying) {
-                    PlayerLifecycleState.PLAYING
+                    PlayerViewModel.PlayerLifecycleState.PLAYING
                 } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                    PlayerLifecycleState.ENDED
+                    PlayerViewModel.PlayerLifecycleState.ENDED
                 } else {
-                    PlayerLifecycleState.PAUSED
+                    PlayerViewModel.PlayerLifecycleState.PAUSED
                 }
                 viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.onPlayerStateChanged(PlayerLifecycleState.ERROR, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(PlayerViewModel.PlayerLifecycleState.ERROR, exoPlayer.currentPosition, exoPlayer.duration)
             }
         }
         exoPlayer.addListener(listener)
@@ -104,21 +103,21 @@ fun PlayerScreen(
         contentAlignment = Alignment.Center
     ) {
         when (val resolveState = uiState.resolveState) {
-            is ResolveState.Resolving -> ResolvingContent()
+            is PlayerViewModel.ResolveState.Resolving -> ResolvingContent()
 
-            is ResolveState.Error -> ErrorContent(
+            is PlayerViewModel.ResolveState.Error -> ErrorContent(
                 error = resolveState.error,
                 onRetry = { viewModel.retryResolve() }
             )
 
-            is ResolveState.Resolved -> {
+            is PlayerViewModel.ResolveState.Resolved -> {
                 when (coordinatorState) {
-                    is CoordinatorState.Idle,
-                    is CoordinatorState.Resolving -> ResolvingContent()
+                    is PlayerViewModel.CoordinatorState.Idle,
+                    is PlayerViewModel.CoordinatorState.Resolving -> ResolvingContent()
 
-                    is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
+                    is PlayerViewModel.CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
 
-                    is CoordinatorState.Error -> ErrorContent(
+                    is PlayerViewModel.CoordinatorState.Error -> ErrorContent(
                         error = coordinatorState.error,
                         onRetry = { viewModel.retryPlay() }
                     )
