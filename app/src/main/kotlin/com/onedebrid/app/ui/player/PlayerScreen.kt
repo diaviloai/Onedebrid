@@ -49,9 +49,9 @@ fun PlayerScreen(
     }
 
     val coordinatorState = uiState.coordinatorState
-    if (coordinatorState is CoordinatorState.Ready) {
-        DisposableEffect(coordinatorState.source.id) {
-            val mediaItem = MediaItem.fromUri(coordinatorState.source.url)
+    if (coordinatorState is CoordinatorState.Playing) {
+        DisposableEffect(coordinatorState.stream.id) {
+            val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
             exoPlayer.playWhenReady = true
@@ -112,7 +112,7 @@ fun PlayerScreen(
                     is CoordinatorState.Idle,
                     is CoordinatorState.Resolving -> ResolvingContent()
 
-                    is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
+                    is CoordinatorState.Playing -> PlayerSurface(exoPlayer = exoPlayer)
 
                     is CoordinatorState.Error -> ErrorContent(
                         error = coordinatorState.error,
