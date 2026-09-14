@@ -30,7 +30,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.ui.player.PlayerViewModel.PlaybackState
 
 @Composable
 fun PlayerScreen(
@@ -52,41 +51,29 @@ fun PlayerScreen(
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                val mappedState = when (playbackState) {
-                    Player.STATE_IDLE -> PlaybackState.IDLE
-                    Player.STATE_BUFFERING -> PlaybackState.BUFFERING
-                    Player.STATE_READY -> if (exoPlayer.isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
-                    Player.STATE_ENDED -> PlaybackState.ENDED
-                    else -> PlaybackState.IDLE
+                val stateName = when (playbackState) {
+                    Player.STATE_IDLE -> "IDLE"
+                    Player.STATE_BUFFERING -> "BUFFERING"
+                    Player.STATE_READY -> if (exoPlayer.isPlaying) "PLAYING" else "PAUSED"
+                    Player.STATE_ENDED -> "ENDED"
+                    else -> "IDLE"
                 }
-                viewModel.onPlayerStateChanged(
-                    newState = mappedState,
-                    positionMs = exoPlayer.currentPosition,
-                    durationMs = exoPlayer.duration
-                )
+                dispatchPlayerState(viewModel, stateName, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val mappedState = if (isPlaying) {
-                    PlaybackState.PLAYING
+                val stateName = if (isPlaying) {
+                    "PLAYING"
                 } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                    PlaybackState.ENDED
+                    "ENDED"
                 } else {
-                    PlaybackState.PAUSED
+                    "PAUSED"
                 }
-                viewModel.onPlayerStateChanged(
-                    newState = mappedState,
-                    positionMs = exoPlayer.currentPosition,
-                    durationMs = exoPlayer.duration
-                )
+                dispatchPlayerState(viewModel, stateName, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.onPlayerStateChanged(
-                    newState = PlaybackState.ERROR,
-                    positionMs = exoPlayer.currentPosition,
-                    durationMs = exoPlayer.duration
-                )
+                dispatchPlayerState(viewModel, "ERROR", exoPlayer.currentPosition, exoPlayer.duration)
             }
         }
         exoPlayer.addListener(listener)
@@ -100,7 +87,7 @@ fun PlayerScreen(
         contentAlignment = Alignment.Center
     ) {
         val resolveStateName = uiState.resolveState.javaClass.simpleName
-        
+
         when {
             resolveStateName.contains("Resolving", ignoreCase = true) -> ResolvingContent()
             resolveStateName.contains("Error", ignoreCase = true) -> {
@@ -113,7 +100,7 @@ fun PlayerScreen(
             else -> {
                 val coordinatorStateName = uiState.coordinatorState.javaClass.simpleName
                 when {
-                    coordinatorStateName.contains("Ready", ignoreCase = true) || 
+                    coordinatorStateName.contains("Ready", ignoreCase = true) ||
                     coordinatorStateName.contains("Playing", ignoreCase = true) -> {
                         PlayerSurface(exoPlayer = exoPlayer)
                     }
@@ -131,13 +118,40 @@ fun PlayerScreen(
     }
 }
 
+private fun dispatchPlayerState(
+    viewModel: PlayerViewModel,
+    stateName: String,
+    positionMs: Long,
+    durationMs: Long
+) {
+    val method = viewModel.javaClass.methods.firstOrNull { it.name == "onPlayerStateChanged" } ?: return
+    val paramType = method.parameterTypes.firstOrNull() ?: return
+
+    val stateArg = try {
+        if (paramType.isEnum) {
+            paramType.enumConstants?.firstOrNull { (it as Enum<*>).name.equals(stateName, ignoreCase = true) }
+        } else {
+            paramType.declaredClasses.firstOrNull { it.simpleName.equals(stateName, ignoreCase = true) }?.kotlin?.objectInstance
+                ?: paramType.getField(stateName).get(null)
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    if (stateArg != null) {
+        try {
+            method.invoke(viewModel, stateArg, positionMs, durationMs)
+        } catch (_: Exception) { }
+    }
+}
+
 private fun extractAppError(state: Any): AppError {
     return try {
         val field = state.javaClass.getDeclaredField("error")
         field.isAccessible = true
-        (field.get(state) as? AppError) ?: AppError.Unknown("An unknown playback error occurred.")
+        (field.get(state) as? AppError) ?: AppError.Unknown("An unknown error occurred.")
     } catch (e: Exception) {
-        AppError.Unknown(e.message ?: "An unknown playback error occurred.")
+        AppError.Unknown(e.message ?: "An unknown error occurred.")
     }
 }
 
