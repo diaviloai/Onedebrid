@@ -206,7 +206,9 @@ com.onedebrid.app/
 
 (This tree reflects what's been directly read/touched across sessions,
 not a guaranteed exhaustive listing — see the repo itself for ground
-truth on files not mentioned in recent session notes.)## Build Configuration
+truth on files not mentioned in recent session notes.)
+
+## Build Configuration
 
 Unchanged this session — see git history on this file for the full
 Session 30 write-up (TMDB `local.properties`/CI-secret setup,
@@ -375,7 +377,9 @@ worked around)
 - **NEW (Session 31):** `GetStreamCandidatesUseCase` and
   `ResolvePlaybackUseCase.resolveSmartDefault()` both call
   `MediaRepository.searchStreamsByMedia()` independently rather than
-  sharing one call path — see Known Limitations and Next Steps #9.## Session 31 — What Was Done
+  sharing one call path — see Known Limitations and Next Steps #9.
+
+## Session 31 — What Was Done
 
 **Scope confirmed with Dia up front, per standing practice, before any
 design was proposed:** the stream-candidate picker UI (Session 30's
