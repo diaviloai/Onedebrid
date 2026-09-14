@@ -33,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
+import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
@@ -63,7 +64,7 @@ fun DetailsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(uiState.media?.title ?: stringResource(R.string.details_title)) }
+                title = { Text(uiState.media?.title ?: "Details") }
             )
         },
         modifier = modifier
@@ -79,7 +80,7 @@ fun DetailsScreen(
                 }
                 uiState.mediaError != null -> {
                     ErrorContent(
-                        message = uiState.mediaError?.message ?: stringResource(R.string.details_error_loading),
+                        message = errorMessage(uiState.mediaError!!),
                         onRetry = viewModel::retryMedia,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -89,7 +90,7 @@ fun DetailsScreen(
                         media = uiState.media!!,
                         episodes = uiState.episodes,
                         isLoadingEpisodes = uiState.isLoadingEpisodes,
-                        episodesError = uiState.episodesError?.message,
+                        episodesError = uiState.episodesError?.let { errorMessage(it) },
                         onPlayMovie = viewModel::onPlayMovie,
                         onChooseStreamMovie = { viewModel.onChooseStream(null) },
                         onPlayEpisode = viewModel::onPlayEpisode,
@@ -141,11 +142,11 @@ private fun MediaContent(
                     Button(onClick = onPlayMovie, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null)
                         Spacer(modifier = Modifier.padding(4.dp))
-                        Text(stringResource(R.string.details_play))
+                        Text("Play")
                     }
                     Spacer(modifier = Modifier.padding(8.dp))
                     OutlinedButton(onClick = onChooseStreamMovie, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.details_choose_stream))
+                        Text("Choose Stream")
                     }
                 }
             }
@@ -154,7 +155,7 @@ private fun MediaContent(
         if (media.type == MediaType.TV_SHOW) {
             item {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text(text = stringResource(R.string.details_episodes), style = MaterialTheme.typography.titleLarge)
+                Text(text = "Episodes", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -203,10 +204,10 @@ private fun EpisodeRow(
             }
         }
         IconButton(onClick = onPlay) {
-            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.details_play))
+            Icon(Icons.Default.PlayArrow, contentDescription = "Play")
         }
         OutlinedButton(onClick = onChooseStream) {
-            Text(stringResource(R.string.details_choose_stream_short))
+            Text("Source")
         }
     }
 }
@@ -226,7 +227,7 @@ private fun StreamPickerBottomSheet(
                 .padding(16.dp)
         ) {
             Text(
-                text = stringResource(R.string.details_select_stream),
+                text = "Select Stream",
                 style = MaterialTheme.typography.titleMedium
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -239,7 +240,7 @@ private fun StreamPickerBottomSheet(
                 }
                 is PickerUiState.Error -> {
                     ErrorContent(
-                        message = pickerState.error.message ?: stringResource(R.string.details_error_loading_streams),
+                        message = errorMessage(pickerState.error),
                         onRetry = onRetry
                     )
                 }
@@ -276,7 +277,18 @@ private fun ErrorContent(
         Text(text = message, color = MaterialTheme.colorScheme.error)
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onRetry) {
-            Text(stringResource(R.string.details_retry))
+            Text("Retry")
         }
     }
+}
+
+@Composable
+private fun errorMessage(error: AppError): String = when (error) {
+    is AppError.NoCachedStreamAvailable -> stringResource(R.string.player_error_no_cached_stream)
+    is AppError.StreamResolutionFailed -> stringResource(R.string.player_error_resolution_failed)
+    is AppError.NotAuthenticated -> stringResource(R.string.player_error_not_authenticated)
+    is AppError.NoNetworkConnection -> stringResource(R.string.player_error_no_network)
+    is AppError.AllProvidersUnavailable -> stringResource(R.string.player_error_providers_unavailable)
+    is AppError.LocalStorageError -> stringResource(R.string.player_error_generic)
+    is AppError.Unknown -> stringResource(R.string.player_error_generic)
 }
