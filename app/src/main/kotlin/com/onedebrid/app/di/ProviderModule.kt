@@ -1,13 +1,7 @@
 package com.onedebrid.app.di
 
-import com.onedebrid.app.provider.debrid.DebridProvider
-import com.onedebrid.app.provider.debrid.StubDebridProvider
 import com.onedebrid.app.provider.metadata.MetadataProvider
 import com.onedebrid.app.provider.metadata.tmdb.TmdbMetadataProvider
-import com.onedebrid.app.provider.search.SearchProvider
-import com.onedebrid.app.provider.search.torrentio.TorrentioSearchProvider
-import com.onedebrid.app.provider.subtitle.StubSubtitleProvider
-import com.onedebrid.app.provider.subtitle.SubtitleProvider
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -20,25 +14,7 @@ abstract class ProviderModule {
 
     @Binds
     @Singleton
-    abstract fun bindDebridProvider(
-        stub: StubDebridProvider
-    ): DebridProvider
-
-   @Binds
-    @Singleton
     abstract fun bindMetadataProvider(
-        tmdb: TmdbMetadataProvider
+        impl: TmdbMetadataProvider
     ): MetadataProvider
-
-    @Binds
-    @Singleton
-    abstract fun bindSearchProvider(
-        torrentio: TorrentioSearchProvider
-    ): SearchProvider
-
-    @Binds
-    @Singleton
-    abstract fun bindSubtitleProvider(
-        stub: StubSubtitleProvider
-    ): SubtitleProvider
 }
