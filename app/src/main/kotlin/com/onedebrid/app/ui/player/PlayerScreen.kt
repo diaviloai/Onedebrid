@@ -48,48 +48,35 @@ fun PlayerScreen(
         }
     }
 
-    val coordinatorState = uiState.coordinatorState
-    when (coordinatorState) {
-        is PlayerViewModel.CoordinatorState.Ready -> {
-            DisposableEffect(coordinatorState.stream.id) {
-                val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
-                exoPlayer.setMediaItem(mediaItem)
-                exoPlayer.prepare()
-                exoPlayer.playWhenReady = true
-                onDispose { }
-            }
-        }
-        else -> {}
-    }
-
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                val mapped = when (playbackState) {
-                    Player.STATE_IDLE -> PlayerViewModel.PlayerLifecycleState.IDLE
-                    Player.STATE_BUFFERING -> PlayerViewModel.PlayerLifecycleState.BUFFERING
-                    Player.STATE_READY -> {
-                        if (exoPlayer.isPlaying) PlayerViewModel.PlayerLifecycleState.PLAYING else PlayerViewModel.PlayerLifecycleState.PAUSED
-                    }
-                    Player.STATE_ENDED -> PlayerViewModel.PlayerLifecycleState.ENDED
-                    else -> PlayerViewModel.PlayerLifecycleState.IDLE
-                }
-                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(
+                    state = when (playbackState) {
+                        Player.STATE_IDLE -> "IDLE"
+                        Player.STATE_BUFFERING -> "BUFFERING"
+                        Player.STATE_READY -> if (exoPlayer.isPlaying) "PLAYING" else "PAUSED"
+                        Player.STATE_ENDED -> "ENDED"
+                        else -> "IDLE"
+                    },
+                    position = exoPlayer.currentPosition,
+                    duration = exoPlayer.duration
+                )
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val mapped = if (isPlaying) {
-                    PlayerViewModel.PlayerLifecycleState.PLAYING
+                val stateName = if (isPlaying) {
+                    "PLAYING"
                 } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                    PlayerViewModel.PlayerLifecycleState.ENDED
+                    "ENDED"
                 } else {
-                    PlayerViewModel.PlayerLifecycleState.PAUSED
+                    "PAUSED"
                 }
-                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(stateName, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.onPlayerStateChanged(PlayerViewModel.PlayerLifecycleState.ERROR, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged("ERROR", exoPlayer.currentPosition, exoPlayer.duration)
             }
         }
         exoPlayer.addListener(listener)
@@ -102,28 +89,45 @@ fun PlayerScreen(
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        when (val resolveState = uiState.resolveState) {
-            is PlayerViewModel.ResolveState.Resolving -> ResolvingContent()
-
-            is PlayerViewModel.ResolveState.Error -> ErrorContent(
-                error = resolveState.error,
-                onRetry = { viewModel.retryResolve() }
-            )
-
-            is PlayerViewModel.ResolveState.Resolved -> {
-                when (coordinatorState) {
-                    is PlayerViewModel.CoordinatorState.Idle,
-                    is PlayerViewModel.CoordinatorState.Resolving -> ResolvingContent()
-
-                    is PlayerViewModel.CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
-
-                    is PlayerViewModel.CoordinatorState.Error -> ErrorContent(
-                        error = coordinatorState.error,
-                        onRetry = { viewModel.retryPlay() }
-                    )
+        val resolveStateName = uiState.resolveState.javaClass.simpleName
+        
+        when {
+            resolveStateName.contains("Resolving", ignoreCase = true) -> ResolvingContent()
+            resolveStateName.contains("Error", ignoreCase = true) -> {
+                val error = extractAppError(uiState.resolveState)
+                ErrorContent(
+                    error = error,
+                    onRetry = { viewModel.retryResolve() }
+                )
+            }
+            else -> {
+                val coordinatorStateName = uiState.coordinatorState.javaClass.simpleName
+                when {
+                    coordinatorStateName.contains("Ready", ignoreCase = true) || 
+                    coordinatorStateName.contains("Playing", ignoreCase = true) -> {
+                        PlayerSurface(exoPlayer = exoPlayer)
+                    }
+                    coordinatorStateName.contains("Error", ignoreCase = true) -> {
+                        val error = extractAppError(uiState.coordinatorState)
+                        ErrorContent(
+                            error = error,
+                            onRetry = { viewModel.retryPlay() }
+                        )
+                    }
+                    else -> ResolvingContent()
                 }
             }
         }
+    }
+}
+
+private fun extractAppError(state: Any): AppError {
+    return try {
+        val field = state.javaClass.getDeclaredField("error")
+        field.isAccessible = true
+        (field.get(state) as? AppError) ?: AppError.Unknown()
+    } catch (e: Exception) {
+        AppError.Unknown()
     }
 }
 
