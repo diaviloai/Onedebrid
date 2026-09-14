@@ -128,7 +128,9 @@ fun NavGraph(
                 }
             )
         ) {
-            PlayerScreen()
+            PlayerScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
     }
 }
