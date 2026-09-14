@@ -29,7 +29,9 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
+import com.onedebrid.app.coordinator.PlaybackState as CoordinatorState
 import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
 
 @Composable
 fun PlayerScreen(
@@ -48,32 +50,48 @@ fun PlayerScreen(
         }
     }
 
+    val coordinatorState = uiState.coordinatorState
+    when (coordinatorState) {
+        is CoordinatorState.Ready -> {
+            DisposableEffect(coordinatorState.stream.id) {
+                val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
+                exoPlayer.setMediaItem(mediaItem)
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+                onDispose { }
+            }
+        }
+        else -> {}
+    }
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                val stateName = when (playbackState) {
-                    Player.STATE_IDLE -> "IDLE"
-                    Player.STATE_BUFFERING -> "BUFFERING"
-                    Player.STATE_READY -> if (exoPlayer.isPlaying) "PLAYING" else "PAUSED"
-                    Player.STATE_ENDED -> "ENDED"
-                    else -> "IDLE"
+                val mapped = when (playbackState) {
+                    Player.STATE_IDLE -> PlayerLifecycleState.IDLE
+                    Player.STATE_BUFFERING -> PlayerLifecycleState.BUFFERING
+                    Player.STATE_READY -> {
+                        if (exoPlayer.isPlaying) PlayerLifecycleState.PLAYING else PlayerLifecycleState.PAUSED
+                    }
+                    Player.STATE_ENDED -> PlayerLifecycleState.ENDED
+                    else -> PlayerLifecycleState.IDLE
                 }
-                dispatchPlayerState(viewModel, stateName, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val stateName = if (isPlaying) {
-                    "PLAYING"
+                val mapped = if (isPlaying) {
+                    PlayerLifecycleState.PLAYING
                 } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                    "ENDED"
+                    PlayerLifecycleState.ENDED
                 } else {
-                    "PAUSED"
+                    PlayerLifecycleState.PAUSED
                 }
-                dispatchPlayerState(viewModel, stateName, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(mapped, exoPlayer.currentPosition, exoPlayer.duration)
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                dispatchPlayerState(viewModel, "ERROR", exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(PlayerLifecycleState.ERROR, exoPlayer.currentPosition, exoPlayer.duration)
             }
         }
         exoPlayer.addListener(listener)
@@ -86,72 +104,28 @@ fun PlayerScreen(
             .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        val resolveStateName = uiState.resolveState.javaClass.simpleName
+        when (val resolveState = uiState.resolveState) {
+            is ResolveState.Resolving -> ResolvingContent()
 
-        when {
-            resolveStateName.contains("Resolving", ignoreCase = true) -> ResolvingContent()
-            resolveStateName.contains("Error", ignoreCase = true) -> {
-                val error = extractAppError(uiState.resolveState)
-                ErrorContent(
-                    error = error,
-                    onRetry = { viewModel.retryResolve() }
-                )
-            }
-            else -> {
-                val coordinatorStateName = uiState.coordinatorState.javaClass.simpleName
-                when {
-                    coordinatorStateName.contains("Ready", ignoreCase = true) ||
-                    coordinatorStateName.contains("Playing", ignoreCase = true) -> {
-                        PlayerSurface(exoPlayer = exoPlayer)
-                    }
-                    coordinatorStateName.contains("Error", ignoreCase = true) -> {
-                        val error = extractAppError(uiState.coordinatorState)
-                        ErrorContent(
-                            error = error,
-                            onRetry = { viewModel.retryPlay() }
-                        )
-                    }
-                    else -> ResolvingContent()
+            is ResolveState.Error -> ErrorContent(
+                error = resolveState.error,
+                onRetry = { viewModel.retryResolve() }
+            )
+
+            is ResolveState.Resolved -> {
+                when (coordinatorState) {
+                    is CoordinatorState.Idle,
+                    is CoordinatorState.Resolving -> ResolvingContent()
+
+                    is CoordinatorState.Ready -> PlayerSurface(exoPlayer = exoPlayer)
+
+                    is CoordinatorState.Error -> ErrorContent(
+                        error = coordinatorState.error,
+                        onRetry = { viewModel.retryPlay() }
+                    )
                 }
             }
         }
-    }
-}
-
-private fun dispatchPlayerState(
-    viewModel: PlayerViewModel,
-    stateName: String,
-    positionMs: Long,
-    durationMs: Long
-) {
-    val method = viewModel.javaClass.methods.firstOrNull { it.name == "onPlayerStateChanged" } ?: return
-    val paramType = method.parameterTypes.firstOrNull() ?: return
-
-    val stateArg = try {
-        if (paramType.isEnum) {
-            paramType.enumConstants?.firstOrNull { (it as Enum<*>).name.equals(stateName, ignoreCase = true) }
-        } else {
-            paramType.declaredClasses.firstOrNull { it.simpleName.equals(stateName, ignoreCase = true) }?.kotlin?.objectInstance
-                ?: paramType.getField(stateName).get(null)
-        }
-    } catch (e: Exception) {
-        null
-    }
-
-    if (stateArg != null) {
-        try {
-            method.invoke(viewModel, stateArg, positionMs, durationMs)
-        } catch (_: Exception) { }
-    }
-}
-
-private fun extractAppError(state: Any): AppError {
-    return try {
-        val field = state.javaClass.getDeclaredField("error")
-        field.isAccessible = true
-        (field.get(state) as? AppError) ?: AppError.Unknown("An unknown error occurred.")
-    } catch (e: Exception) {
-        AppError.Unknown(e.message ?: "An unknown error occurred.")
     }
 }
 
