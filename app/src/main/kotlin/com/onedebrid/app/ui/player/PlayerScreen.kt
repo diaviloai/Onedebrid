@@ -51,32 +51,41 @@ fun PlayerScreen(
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val mappedState = when (playbackState) {
+                    Player.STATE_IDLE -> PlaybackState.IDLE
+                    Player.STATE_BUFFERING -> PlaybackState.BUFFERING
+                    Player.STATE_READY -> if (exoPlayer.isPlaying) PlaybackState.PLAYING else PlaybackState.PAUSED
+                    Player.STATE_ENDED -> PlaybackState.ENDED
+                    else -> PlaybackState.IDLE
+                }
                 viewModel.onPlayerStateChanged(
-                    state = when (playbackState) {
-                        Player.STATE_IDLE -> "IDLE"
-                        Player.STATE_BUFFERING -> "BUFFERING"
-                        Player.STATE_READY -> if (exoPlayer.isPlaying) "PLAYING" else "PAUSED"
-                        Player.STATE_ENDED -> "ENDED"
-                        else -> "IDLE"
-                    },
-                    position = exoPlayer.currentPosition,
-                    duration = exoPlayer.duration
+                    newState = mappedState,
+                    positionMs = exoPlayer.currentPosition,
+                    durationMs = exoPlayer.duration
                 )
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val stateName = if (isPlaying) {
-                    "PLAYING"
+                val mappedState = if (isPlaying) {
+                    PlaybackState.PLAYING
                 } else if (exoPlayer.playbackState == Player.STATE_ENDED) {
-                    "ENDED"
+                    PlaybackState.ENDED
                 } else {
-                    "PAUSED"
+                    PlaybackState.PAUSED
                 }
-                viewModel.onPlayerStateChanged(stateName, exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(
+                    newState = mappedState,
+                    positionMs = exoPlayer.currentPosition,
+                    durationMs = exoPlayer.duration
+                )
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                viewModel.onPlayerStateChanged("ERROR", exoPlayer.currentPosition, exoPlayer.duration)
+                viewModel.onPlayerStateChanged(
+                    newState = PlaybackState.ERROR,
+                    positionMs = exoPlayer.currentPosition,
+                    durationMs = exoPlayer.duration
+                )
             }
         }
         exoPlayer.addListener(listener)
@@ -125,9 +134,9 @@ private fun extractAppError(state: Any): AppError {
     return try {
         val field = state.javaClass.getDeclaredField("error")
         field.isAccessible = true
-        (field.get(state) as? AppError) ?: AppError.Unknown()
+        (field.get(state) as? AppError) ?: AppError.Unknown("An unknown playback error occurred.")
     } catch (e: Exception) {
-        AppError.Unknown()
+        AppError.Unknown(e.message ?: "An unknown playback error occurred.")
     }
 }
 
