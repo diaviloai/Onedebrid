@@ -33,19 +33,17 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
 import com.onedebrid.app.domain.model.MediaType
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.WatchedItem
 import kotlinx.coroutines.flow.collectLatest
 
-/**
- * The Home screen — Continue Watching, per UI_UX_Design.md's "Home Hub".
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToDetails: (MediaType, String, Long?) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToPlayer: (MediaType, String, String?, String) -> Unit,
+    onNavigateToPlayer: (MediaType, String, String?, StreamCandidate?) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -55,9 +53,9 @@ fun HomeScreen(
         viewModel.navigateToPlayer.collectLatest { navArgs ->
             onNavigateToPlayer(
                 MediaType.MOVIE,
-                navArgs.mediaId.toString(),
+                navArgs.mediaId,
                 navArgs.episodeId,
-                navArgs.preferredSource ?: ""
+                navArgs.preferredSource
             )
         }
     }

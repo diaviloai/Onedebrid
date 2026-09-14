@@ -185,7 +185,7 @@ class DetailsViewModel @Inject constructor(
                 mediaId = media.id,
                 episodeId = loadedPicker.episode?.id,
                 resumeMs = initialResumePositionMs,
-                preferredSource = candidate.title
+                preferredSource = candidate
             )
         )
     }

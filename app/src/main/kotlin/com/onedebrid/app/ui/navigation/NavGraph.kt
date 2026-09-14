@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.onedebrid.app.domain.model.MediaType
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.ui.details.DetailsScreen
 import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
@@ -31,12 +32,12 @@ sealed class Screen(val route: String) {
             mediaType: MediaType,
             mediaId: String,
             episodeId: String? = null,
-            preferredSource: String? = null
+            preferredSource: StreamCandidate? = null
         ): String {
             val base = "player/${mediaType.name}/$mediaId"
             val params = mutableListOf<String>()
             if (!episodeId.isNullOrBlank()) params.add("episodeId=$episodeId")
-            if (!preferredSource.isNullOrBlank()) params.add("preferredSource=$preferredSource")
+            if (preferredSource != null) params.add("preferredSource=${preferredSource.title}")
             return if (params.isNotEmpty()) "$base?${params.joinToString("&")}" else base
         }
     }
@@ -128,9 +129,7 @@ fun NavGraph(
                 }
             )
         ) {
-            PlayerScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            PlayerScreen()
         }
     }
 }
