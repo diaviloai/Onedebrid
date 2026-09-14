@@ -54,9 +54,9 @@ fun HomeScreen(
     LaunchedEffect(viewModel) {
         viewModel.navigateToPlayer.collectLatest { navArgs ->
             onNavigateToPlayer(
+                navArgs.mediaType,
                 navArgs.mediaId,
                 navArgs.episodeId,
-                navArgs.resumeMs?.toString() ?: "",
                 navArgs.preferredSource ?: ""
             )
         }
