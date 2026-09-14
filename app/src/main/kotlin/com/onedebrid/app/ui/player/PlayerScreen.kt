@@ -30,6 +30,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
 import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.ui.player.PlayerViewModel.CoordinatorState
+import com.onedebrid.app.ui.player.PlayerViewModel.PlayerLifecycleState
+import com.onedebrid.app.ui.player.PlayerViewModel.ResolveState
 
 @Composable
 fun PlayerScreen(
@@ -49,14 +52,17 @@ fun PlayerScreen(
     }
 
     val coordinatorState = uiState.coordinatorState
-    if (coordinatorState is CoordinatorState.Ready) {
-        DisposableEffect(coordinatorState.stream.id) {
-            val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = true
-            onDispose { }
+    when (coordinatorState) {
+        is CoordinatorState.Ready -> {
+            DisposableEffect(coordinatorState.stream.id) {
+                val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
+                exoPlayer.setMediaItem(mediaItem)
+                exoPlayer.prepare()
+                exoPlayer.playWhenReady = true
+                onDispose { }
+            }
         }
+        else -> {}
     }
 
     DisposableEffect(exoPlayer) {
