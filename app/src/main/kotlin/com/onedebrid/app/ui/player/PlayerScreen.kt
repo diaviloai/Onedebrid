@@ -1,5 +1,6 @@
 package com.onedebrid.app.ui.player
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,7 @@ import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
 @Composable
 fun PlayerScreen(
     modifier: Modifier = Modifier,
+    onNavigateBack: (() -> Unit)? = null,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -43,6 +45,13 @@ fun PlayerScreen(
 
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
+    // Intercept system back gestures to stop playback and end the session before navigating back
+    BackHandler {
+        viewModel.stop()
+        onNavigateBack?.invoke()
+    }
+
+    // Ensures session is stopped when the composable leaves the Composition hierarchy
     DisposableEffect(Unit) {
         onDispose {
             viewModel.stop()
