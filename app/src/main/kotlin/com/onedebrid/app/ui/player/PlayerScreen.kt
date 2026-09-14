@@ -30,6 +30,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
 import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.ui.player.PlayerViewModel.PlaybackState
 
 @Composable
 fun PlayerScreen(
