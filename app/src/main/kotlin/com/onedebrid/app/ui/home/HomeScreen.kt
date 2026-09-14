@@ -1,26 +1,27 @@
-package com.onedebrid.app.ui.home
+package com.onedebrid.app.ui.details
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,29 +33,26 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
+import com.onedebrid.app.domain.model.Episode
+import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
-import com.onedebrid.app.domain.model.WatchedItem
+import com.onedebrid.app.domain.model.StreamCandidate
 import kotlinx.coroutines.flow.collectLatest
 
-/**
- * The Home screen — Continue Watching, per UI_UX_Design.md's "Home Hub".
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    onNavigateToDetails: (MediaType, String, Long?) -> Unit,
-    onNavigateToSearch: () -> Unit,
-    onNavigateToSettings: () -> Unit,
+fun DetailsScreen(
     onNavigateToPlayer: (MediaType, String, String?, String) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: HomeViewModel = hiltViewModel()
+    viewModel: DetailsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(viewModel) {
         viewModel.navigateToPlayer.collectLatest { navArgs ->
+            val mediaType = uiState.media?.type ?: MediaType.MOVIE
             onNavigateToPlayer(
-                MediaType.MOVIE,
+                mediaType,
                 navArgs.mediaId,
                 navArgs.episodeId,
                 navArgs.preferredSource ?: ""
@@ -62,29 +60,51 @@ fun HomeScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(stringResource(R.string.home_title)) },
-            actions = {
-                TextButton(onClick = onNavigateToSettings) {
-                    Text(stringResource(R.string.home_settings_action))
-                }
-                Button(onClick = onNavigateToSearch) {
-                    Text(stringResource(R.string.home_search_action))
-                }
-            }
-        )
-
-        Box(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(uiState.media?.title ?: stringResource(R.string.details_title)) }
+            )
+        },
+        modifier = modifier
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
             when {
-                uiState.isLoading -> LoadingContent()
-                uiState.continueWatching.isEmpty() -> EmptyContent()
-                else -> ContinueWatchingList(
-                    items = uiState.continueWatching,
-                    onItemClick = { item ->
-                        onNavigateToDetails(MediaType.MOVIE, item.mediaId, item.positionMs)
-                    },
-                    onRemove = viewModel::removeItem
+                uiState.isLoadingMedia -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                }
+                uiState.mediaError != null -> {
+                    ErrorContent(
+                        message = uiState.mediaError?.message ?: stringResource(R.string.details_error_loading),
+                        onRetry = viewModel::retryMedia,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                uiState.media != null -> {
+                    MediaContent(
+                        media = uiState.media!!,
+                        episodes = uiState.episodes,
+                        isLoadingEpisodes = uiState.isLoadingEpisodes,
+                        episodesError = uiState.episodesError?.message,
+                        onPlayMovie = viewModel::onPlayMovie,
+                        onChooseStreamMovie = { viewModel.onChooseStream(null) },
+                        onPlayEpisode = viewModel::onPlayEpisode,
+                        onChooseStreamEpisode = { episode -> viewModel.onChooseStream(episode) },
+                        onRetryEpisodes = viewModel::retryEpisodes
+                    )
+                }
+            }
+
+            if (uiState.picker !is PickerUiState.Closed) {
+                StreamPickerBottomSheet(
+                    pickerState = uiState.picker,
+                    onDismiss = viewModel::onDismissPicker,
+                    onCandidateSelected = viewModel::onCandidateSelected,
+                    onRetry = viewModel::retryChooseStream
                 )
             }
         }
@@ -92,90 +112,171 @@ fun HomeScreen(
 }
 
 @Composable
-private fun LoadingContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun EmptyContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = stringResource(R.string.home_continue_watching_empty),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ContinueWatchingList(
-    items: List<WatchedItem>,
-    onItemClick: (WatchedItem) -> Unit,
-    onRemove: (String) -> Unit
+private fun MediaContent(
+    media: Media,
+    episodes: List<Episode>,
+    isLoadingEpisodes: Boolean,
+    episodesError: String?,
+    onPlayMovie: () -> Unit,
+    onChooseStreamMovie: () -> Unit,
+    onPlayEpisode: (Episode) -> Unit,
+    onChooseStreamEpisode: (Episode) -> Unit,
+    onRetryEpisodes: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = stringResource(R.string.home_continue_watching_title),
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(items, key = { it.mediaId }) { item ->
-                ContinueWatchingRow(
-                    item = item,
-                    onClick = { onItemClick(item) },
-                    onRemove = onRemove
-                )
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        item {
+            Text(text = media.title, style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+            media.overview?.let {
+                Text(text = it, style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            if (media.type == MediaType.MOVIE) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = onPlayMovie, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text(stringResource(R.string.details_play))
+                    }
+                    Spacer(modifier = Modifier.padding(8.dp))
+                    OutlinedButton(onClick = onChooseStreamMovie, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.details_choose_stream))
+                    }
+                }
+            }
+        }
+
+        if (media.type == MediaType.TV_SHOW) {
+            item {
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(text = stringResource(R.string.details_episodes), style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            if (isLoadingEpisodes) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (episodesError != null) {
+                item {
+                    ErrorContent(message = episodesError, onRetry = onRetryEpisodes)
+                }
+            } else {
+                items(episodes, key = { it.id }) { episode ->
+                    EpisodeRow(
+                        episode = episode,
+                        onPlay = { onPlayEpisode(episode) },
+                        onChooseStream = { onChooseStreamEpisode(episode) }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ContinueWatchingRow(
-    item: WatchedItem,
-    onClick: () -> Unit,
-    onRemove: (String) -> Unit
+private fun EpisodeRow(
+    episode: Episode,
+    onPlay: () -> Unit,
+    onChooseStream: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = item.mediaId,
+                text = "S${episode.seasonNumber}E${episode.episodeNumber} - ${episode.title}",
                 style = MaterialTheme.typography.bodyLarge
             )
-            val progressPercent = continueWatchingProgressPercent(item)
-            if (progressPercent != null) {
-                Text(
-                    text = stringResource(
-                        R.string.home_continue_watching_progress,
-                        progressPercent
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            episode.overview?.let {
+                Text(text = it, style = MaterialTheme.typography.bodySmall, maxLines = 2)
             }
         }
-        IconButton(onClick = { onRemove(item.mediaId) }) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.home_remove_item)
-            )
+        IconButton(onClick = onPlay) {
+            Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.details_play))
+        }
+        OutlinedButton(onClick = onChooseStream) {
+            Text(stringResource(R.string.details_choose_stream_short))
         }
     }
 }
 
-private fun continueWatchingProgressPercent(item: WatchedItem): Int? {
-    val position = item.positionMs ?: return null
-    val duration = item.durationMs ?: return null
-    if (duration <= 0L) return null
-    return ((position.toDouble() / duration.toDouble()) * 100).toInt().coerceIn(0, 100)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StreamPickerBottomSheet(
+    pickerState: PickerUiState,
+    onDismiss: () -> Unit,
+    onCandidateSelected: (StreamCandidate) -> Unit,
+    onRetry: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.details_select_stream),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when (pickerState) {
+                is PickerUiState.Loading -> {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                }
+                is PickerUiState.Error -> {
+                    ErrorContent(
+                        message = pickerState.error.message ?: stringResource(R.string.details_error_loading_streams),
+                        onRetry = onRetry
+                    )
+                }
+                is PickerUiState.Loaded -> {
+                    LazyColumn {
+                        items(pickerState.candidates) { candidate ->
+                            Button(
+                                onClick = { onCandidateSelected(candidate) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Text(candidate.title)
+                            }
+                        }
+                    }
+                }
+                PickerUiState.Closed -> {}
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorContent(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = message, color = MaterialTheme.colorScheme.error)
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(onClick = onRetry) {
+            Text(stringResource(R.string.details_retry))
+        }
+    }
 }
