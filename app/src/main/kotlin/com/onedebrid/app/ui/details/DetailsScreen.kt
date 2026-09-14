@@ -278,7 +278,7 @@ private fun ErrorContent(
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onRetry) {
             Text("Retry")
-        }
+        } 
     }
 }
 
