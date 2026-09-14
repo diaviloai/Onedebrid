@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
+import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.StreamCandidate
 
@@ -37,7 +38,7 @@ fun DetailsScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     Box(modifier = modifier.fillMaxSize()) {
-        if (uiState.isLoading) {
+        if (uiState.isLoadingMedia) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         } else {
             Column(
@@ -46,17 +47,17 @@ fun DetailsScreen(
                     .padding(16.dp)
             ) {
                 Text(
-                    text = uiState.title,
+                    text = uiState.media?.title ?: "",
                     style = MaterialTheme.typography.headlineLarge
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = uiState.overview,
+                    text = uiState.media?.overview ?: "",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
-                    onClick = { viewModel.onPlayClicked() },
+                    onClick = { viewModel.onPlayMovie() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(text = stringResource(R.string.details_play))
@@ -64,20 +65,15 @@ fun DetailsScreen(
             }
         }
 
-        if (uiState.showStreamPicker) {
+        if (uiState.picker is PickerUiState.Loaded) {
+            val candidates = (uiState.picker as PickerUiState.Loaded).candidates
             ModalBottomSheet(
-                onDismissRequest = { viewModel.onDismissStreamPicker() }
+                onDismissRequest = { viewModel.onDismissPicker() }
             ) {
                 StreamPickerContent(
-                    streams = uiState.availableStreams,
+                    streams = candidates,
                     onStreamSelected = { stream ->
-                        viewModel.onStreamSelected(stream)
-                        onNavigateToPlayer(
-                            viewModel.mediaType,
-                            viewModel.mediaId,
-                            null,
-                            stream
-                        )
+                        viewModel.onCandidateSelected(stream)
                     }
                 )
             }

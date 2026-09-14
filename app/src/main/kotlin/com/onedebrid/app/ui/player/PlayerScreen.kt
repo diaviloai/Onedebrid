@@ -20,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -28,23 +27,24 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
-import com.onedebrid.app.domain.model.AppError
+import com.onedebrid.app.domain.error.AppError
 
 @Composable
 fun PlayerScreen(
     onNavigateBack: () -> Unit,
+    modifier: Modifier = Modifier,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.onClearedPlayer()
+            viewModel.onDisposePlayer()
         }
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
@@ -89,6 +89,15 @@ private fun ErrorContent(
     onRetry: () -> Unit,
     onNavigateBack: () -> Unit
 ) {
+    val message = when (error) {
+        is AppError.NoCachedStreamAvailable -> stringResource(R.string.player_error_no_cached_stream)
+        is AppError.StreamResolutionFailed -> stringResource(R.string.player_error_resolution_failed)
+        is AppError.NotAuthenticated -> stringResource(R.string.player_error_not_authenticated)
+        is AppError.NoNetworkConnection -> stringResource(R.string.player_error_no_network)
+        is AppError.AllProvidersUnavailable -> stringResource(R.string.player_error_providers_unavailable)
+        else -> stringResource(R.string.player_error_generic)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -103,7 +112,7 @@ private fun ErrorContent(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = error.message ?: error.toString(),
+            text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = Color.LightGray
         )

@@ -7,6 +7,12 @@
     <string name="player_error_title">Playback Error</string>
     <string name="player_retry">Retry</string>
     <string name="player_back">Back</string>
+    <string name="player_error_no_cached_stream">No cached stream available.</string>
+    <string name="player_error_resolution_failed">Stream resolution failed.</string>
+    <string name="player_error_not_authenticated">Not authenticated with debrid service.</string>
+    <string name="player_error_no_network">No network connection available.</string>
+    <string name="player_error_providers_unavailable">All providers are currently unavailable.</string>
+    <string name="player_error_generic">An unexpected error occurred.</string>
 
     <!-- Details Screen & Stream Picker -->
     <string name="details_no_streams">No streams found for this media.</string>
@@ -19,9 +25,49 @@
     <string name="home_trending">Trending</string>
     <string name="home_search_placeholder">Search movies &amp; TV shows…</string>
 
+    <!-- Search Screen -->
+    <string name="search_placeholder">Search movies &amp; TV shows…</string>
+    <string name="search_idle_empty">Start typing to search for movies and TV shows.</string>
+    <string name="search_history_title">Recent Searches</string>
+    <string name="search_history_clear">Clear History</string>
+    <string name="search_no_results">No results found.</string>
+    <string name="search_tv_show_label">TV Show</string>
+    <string name="search_error_providers_unavailable">Search providers are currently unavailable.</string>
+
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_debrid_accounts">Debrid Accounts</string>
     <string name="settings_real_debrid_api_key">Real-Debrid API Key</string>
     <string name="settings_save">Save</string>
+    <string name="settings_new_profile_title">New Profile</string>
+    <string name="settings_rename_profile_title">Rename Profile</string>
+    <string name="settings_profile_cancel">Cancel</string>
+    <string name="settings_profiles_title">Profiles</string>
+    <string name="settings_profile_add">Add Profile</string>
+    <string name="settings_profile_active_label">Active</string>
+    <string name="settings_profile_switch">Switch</string>
+    <string name="settings_profile_save">Save Profile</string>
+    <string name="settings_profile_delete">Delete Profile</string>
+    <string name="settings_profile_name_label">Profile Name</string>
+    <string name="settings_language_code_hint">Language Code (e.g., en)</string>
+    <string name="settings_section_playback">Playback</string>
+    <string name="settings_preferred_quality">Preferred Quality</string>
+    <string name="settings_preferred_audio_language">Audio Language</string>
+    <string name="settings_autoplay">Autoplay Next Episode</string>
+    <string name="settings_section_subtitles">Subtitles</string>
+    <string name="settings_subtitles_enabled">Enable Subtitles</string>
+    <string name="settings_subtitle_language">Subtitle Language</string>
+    <string name="settings_subtitle_format_none">None</string>
+    <string name="settings_subtitle_format">Subtitle Format</string>
+    <string name="settings_hearing_impaired">Hearing Impaired (SDH)</string>
+    <string name="settings_section_search">Search</string>
+    <string name="settings_include_adult">Include Adult Content</string>
+    <string name="settings_content_language">Content Language</string>
+    <string name="settings_section_theme">Theme</string>
+    <string name="settings_dynamic_color">Dynamic Colors</string>
+    <string name="settings_dark_mode_system">System Default</string>
+    <string name="settings_dark_mode_on">On</string>
+    <string name="settings_dark_mode_off">Off</string>
+    <string name="settings_dark_mode">Dark Mode</string>
+    <string name="settings_error_generic">Failed to save settings.</string>
 </resources>
