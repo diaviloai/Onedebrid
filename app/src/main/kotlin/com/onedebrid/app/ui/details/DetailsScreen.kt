@@ -1,7 +1,6 @@
 package com.onedebrid.app.ui.details
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -308,11 +306,6 @@ private fun StreamCandidateRow(
                 // Quality Badge (e.g. 4K, 1080p, HD)
                 QualityBadge(candidate = candidate)
 
-                // Provider Badge if available (e.g. RealDebrid, TorBox)
-                candidate.providerName?.let { provider ->
-                    Badge(text = provider, isPrimary = false)
-                }
-
                 // File size if available
                 candidate.sizeBytes?.let { size ->
                     Text(
@@ -323,7 +316,7 @@ private fun StreamCandidateRow(
                 }
             }
 
-            // Clean, primary title
+            // Primary title
             Text(
                 text = candidate.title,
                 style = MaterialTheme.typography.bodyMedium,
