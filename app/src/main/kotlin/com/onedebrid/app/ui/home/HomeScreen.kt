@@ -62,13 +62,13 @@ fun HomeScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text(stringResource(R.string.home_title)) },
+            title = { Text(stringResource(R.string.app_name)) },
             actions = {
                 TextButton(onClick = onNavigateToSettings) {
-                    Text(stringResource(R.string.home_settings_action))
+                    Text(stringResource(R.string.settings_title))
                 }
                 Button(onClick = onNavigateToSearch) {
-                    Text(stringResource(R.string.home_search_action))
+                    Text(stringResource(R.string.home_search_placeholder))
                 }
             }
         )
@@ -100,7 +100,7 @@ private fun LoadingContent() {
 private fun EmptyContent() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = stringResource(R.string.home_continue_watching_empty),
+            text = stringResource(R.string.details_no_streams),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -115,7 +115,7 @@ private fun ContinueWatchingList(
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
-            text = stringResource(R.string.home_continue_watching_title),
+            text = stringResource(R.string.home_continue_watching),
             style = MaterialTheme.typography.titleSmall,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
@@ -153,10 +153,7 @@ private fun ContinueWatchingRow(
             val progressPercent = continueWatchingProgressPercent(item)
             if (progressPercent != null) {
                 Text(
-                    text = stringResource(
-                        R.string.home_continue_watching_progress,
-                        progressPercent
-                    ),
+                    text = "$progressPercent%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -165,7 +162,7 @@ private fun ContinueWatchingRow(
         IconButton(onClick = { onRemove(item.mediaId) }) {
             Icon(
                 imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.home_remove_item)
+                contentDescription = null
             )
         }
     }
