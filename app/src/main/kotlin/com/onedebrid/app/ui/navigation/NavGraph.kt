@@ -78,8 +78,8 @@ fun NavGraph(
 
         composable(Screen.Search.route) {
             SearchScreen(
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                onNavigateToDetails = { mediaId ->
+                    navController.navigate(Screen.Details.createRoute(MediaType.MOVIE, mediaId))
                 }
             )
         }
@@ -128,9 +128,7 @@ fun NavGraph(
                 }
             )
         ) {
-            PlayerScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            PlayerScreen()
         }
     }
 }
