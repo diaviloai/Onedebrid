@@ -1,8 +1,9 @@
 package com.onedebrid.app.coordinator
 
 import com.google.common.truth.Truth.assertThat
-import com.onedebrid.app.domain.error.ProviderError
-import com.onedebrid.app.domain.error.ProviderResult
+import com.onedebrid.app.domain.error.OneDebridError
+import com.onedebrid.app.domain.model.AccountInfo
+import com.onedebrid.app.domain.model.ProviderResult
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.provider.debrid.DebridProvider
@@ -46,7 +47,7 @@ class PlaybackCoordinatorTest {
                 id = "stream_1",
                 mediaId = "550",
                 url = expectedUrl,
-                quality = VideoQuality.QUALITY_1080P,
+                quality = VideoQuality.UNKNOWN,
                 isCached = true
             )
         )
@@ -61,27 +62,38 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun fakeDebridProvider_handlesFailureCorrectly() = runTest {
-        mockDebridProvider.nextResult = ProviderResult.Error(
-            ProviderError.NoStreamsFound("Stream unavailable")
+        mockDebridProvider.nextResult = ProviderResult.Failure(
+            OneDebridError.ProviderError("Stream unavailable")
         )
 
         val result = mockDebridProvider.resolveStream("invalid_hash")
 
-        assertThat(result).isInstanceOf(ProviderResult.Error::class.java)
-        val error = (result as ProviderResult.Error).error
-        assertThat(error).isInstanceOf(ProviderError.NoStreamsFound::class.java)
+        assertThat(result).isInstanceOf(ProviderResult.Failure::class.java)
+        val error = (result as ProviderResult.Failure).error
+        assertThat(error).isInstanceOf(OneDebridError.ProviderError::class.java)
     }
 }
 
 /**
- * Fake DebridProvider implementation matching domain interfaces.
+ * Fake DebridProvider implementation fully satisfying the domain contract.
  */
 private class FakeDebridProvider : DebridProvider {
-    var nextResult: ProviderResult<StreamSource> = ProviderResult.Error(
-        ProviderError.Unknown("No fake result configured")
+    override val id: String = "fake_debrid"
+    override val displayName: String = "Fake Debrid"
+
+    var nextResult: ProviderResult<StreamSource> = ProviderResult.Failure(
+        OneDebridError.Unknown("No fake result configured")
     )
 
     override suspend fun resolveStream(hash: String): ProviderResult<StreamSource> {
         return nextResult
+    }
+
+    override suspend fun verifyAccount(): ProviderResult<AccountInfo> {
+        return ProviderResult.Failure(OneDebridError.Unknown("Not implemented"))
+    }
+
+    override suspend fun checkCache(hashes: List<String>): ProviderResult<Map<String, Boolean>> {
+        return ProviderResult.Success(hashes.associateWith { true })
     }
 }
