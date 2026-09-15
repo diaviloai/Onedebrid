@@ -5,7 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch: # Enables manual run button in GitHub web and mobile app
+  workflow_dispatch: # Allows manual trigger from GitHub Web & Mobile App
 
 jobs:
   build-and-test:
@@ -35,8 +35,8 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Run Dedicated Integration Tests
-        run: ./gradlew testDebugUnitTest --tests "com.onedebrid.app.provider.MediaDiscoveryIntegrationTest"
+      - name: Run Unit & Integration Tests
+        run: ./gradlew testDebugUnitTest
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
