@@ -1,4 +1,4 @@
-package com.onedebrid.app.test
+package com.onedebrid.app.provider
 
 import com.google.common.truth.Truth.assertThat
 import com.onedebrid.app.domain.error.ProviderResult
@@ -11,6 +11,7 @@ import com.onedebrid.app.provider.metadata.tmdb.TmdbMetadataProvider
 import com.onedebrid.app.provider.search.SearchFilters
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
 import com.onedebrid.app.provider.search.torrentio.TorrentioSearchProvider
+import com.onedebrid.app.test.MockWebServerRule
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Rule
@@ -100,5 +101,39 @@ class MediaDiscoveryIntegrationTest {
         val streamSource = (streamResult as ProviderResult.Success).data
         assertThat(streamSource.url).isEqualTo("https://download.real-debrid.com/cdn/Movie.2026.2160p.mkv")
         assertThat(streamSource.isCached).isTrue()
+    }
+
+    @Test
+    fun torrentioSearch_missingInfoHash_extractsHashFromUrlFallback() = runTest {
+        val expectedHash = "9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2e1d0c"
+        mockWebServerRule.enqueueResponse(
+            """
+            {
+              "streams": [
+                {
+                  "name": "Torrentio\n1080p",
+                  "title": "Movie.2026.1080p.WEB-DL.x264 👤 45 💾 3.2 GB",
+                  "url": "https://torrentio.strem.fun/resolve/realdebrid/$expectedHash/0/movie.mkv"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val media = Media(
+            id = "100",
+            imdbId = "tt0111161",
+            title = "The Shawshank Redemption",
+            type = MediaType.MOVIE
+        )
+
+        val result = torrentioProvider.searchByMedia(media, SearchFilters())
+
+        assertThat(result).isInstanceOf(ProviderResult.Success::class.java)
+        val candidates = (result as ProviderResult.Success).data
+        assertThat(candidates).hasSize(1)
+
+        val candidate = candidates.first()
+        assertThat(candidate.hash).isEqualTo(expectedHash)
     }
 }
