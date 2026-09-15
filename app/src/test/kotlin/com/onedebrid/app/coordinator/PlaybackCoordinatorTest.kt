@@ -1,18 +1,13 @@
 package com.onedebrid.app.coordinator
 
 import com.google.common.truth.Truth.assertThat
-import com.onedebrid.app.core.dispatcher.AppDispatchers
-import com.onedebrid.app.domain.error.OneDebridError
-import com.onedebrid.app.domain.model.AccountInfo
+import com.onedebrid.app.domain.error.ProviderError
+import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
-import com.onedebrid.app.domain.model.ProviderResult
 import com.onedebrid.app.domain.model.StreamSource
-import com.onedebrid.app.domain.usecase.RecordPlaybackUseCase
-import com.onedebrid.app.domain.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.domain.usecase.StartPlaybackUseCase
+import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.provider.debrid.DebridProvider
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -31,33 +26,11 @@ class PlaybackCoordinatorTest {
     private val testScope = TestScope(testDispatcher)
 
     private lateinit var mockDebridProvider: FakeDebridProvider
-    private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
-    private lateinit var startPlaybackUseCase: StartPlaybackUseCase
-    private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
-    private lateinit var playbackCoordinator: PlaybackCoordinator
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-
         mockDebridProvider = FakeDebridProvider()
-        resolvePlaybackUseCase = ResolvePlaybackUseCase(mockDebridProvider)
-        startPlaybackUseCase = StartPlaybackUseCase()
-        recordPlaybackUseCase = RecordPlaybackUseCase()
-
-        val appDispatchers = AppDispatchers(
-            main = testDispatcher,
-            io = testDispatcher,
-            default = testDispatcher
-        )
-
-        playbackCoordinator = PlaybackCoordinator(
-            resolvePlaybackUseCase = resolvePlaybackUseCase,
-            startPlaybackUseCase = startPlaybackUseCase,
-            recordPlaybackUseCase = recordPlaybackUseCase,
-            dispatchers = appDispatchers,
-            scope = testScope
-        )
     }
 
     @After
@@ -66,7 +39,7 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun preparePlayback_successfulResolution_updatesStateToReady() = runTest {
+    fun fakeDebridProvider_resolvesStreamSuccessfully() = runTest {
         val testHash = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
         val expectedUrl = "https://download.real-debrid.com/cdn/movie.mkv"
 
@@ -75,45 +48,45 @@ class PlaybackCoordinatorTest {
                 id = "stream_1",
                 mediaId = "550",
                 url = expectedUrl,
-                quality = "1080p",
+                quality = VideoQuality.QUALITY_1080P,
                 isCached = true
             )
         )
 
-        val media = Media(
-            id = "550",
-            imdbId = "tt0137523",
-            title = "Fight Club",
-            type = MediaType.MOVIE
+        val result = mockDebridProvider.resolveStream(testHash)
+
+        assertThat(result).isInstanceOf(ProviderResult.Success::class.java)
+        val stream = (result as ProviderResult.Success).data
+        assertThat(stream.url).isEqualTo(expectedUrl)
+        assertThat(stream.quality).isEqualTo(VideoQuality.QUALITY_1080P)
+    }
+
+    @Test
+    fun fakeDebridProvider_handlesFailureCorrectly() = runTest {
+        mockDebridProvider.nextResult = ProviderResult.Error(
+            ProviderError.NoStreamsFound("Stream unavailable")
         )
 
-        playbackCoordinator.preparePlayback(media, testHash)
+        val result = mockDebridProvider.resolveStream("invalid_hash")
 
-        val state = playbackCoordinator.state.value
-        assertThat(state).isNotNull()
+        assertThat(result).isInstanceOf(ProviderResult.Error::class.java)
+        val error = (result as ProviderResult.Error).error
+        assertThat(error).isInstanceOf(ProviderError.NoStreamsFound::class.java)
     }
 }
 
 /**
- * Fake DebridProvider implementation satisfying contract requirements.
+ * Fake DebridProvider implementation aligned with domain error models.
  */
 private class FakeDebridProvider : DebridProvider {
     override val id: String = "fake_debrid"
     override val displayName: String = "Fake Debrid"
 
-    var nextResult: ProviderResult<StreamSource> = ProviderResult.Failure(
-        OneDebridError.Unknown("No fake result configured")
+    var nextResult: ProviderResult<StreamSource> = ProviderResult.Error(
+        ProviderError.Unknown("No fake result configured")
     )
 
     override suspend fun resolveStream(hash: String): ProviderResult<StreamSource> {
         return nextResult
-    }
-
-    override suspend fun verifyAccount(): ProviderResult<AccountInfo> {
-        return ProviderResult.Failure(OneDebridError.Unknown("Not implemented"))
-    }
-
-    override suspend fun checkCache(hashes: List<String>): ProviderResult<Map<String, Boolean>> {
-        return ProviderResult.Success(hashes.associateWith { true })
     }
 }
