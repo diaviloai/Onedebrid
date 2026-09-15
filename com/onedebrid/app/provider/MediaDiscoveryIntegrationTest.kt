@@ -131,4 +131,37 @@ class MediaDiscoveryIntegrationTest {
         val candidate = candidates.first()
         assertThat(candidate.hash).isEqualTo(expectedHash)
     }
+
+    @Test
+    fun torrentioSearch_tvShowWithSeasonAndEpisode_formatsPathCorrectly() = runTest {
+        mockWebServerRule.enqueueResponse(
+            """
+            {
+              "streams": [
+                {
+                  "name": "Torrentio\n1080p",
+                  "title": "Breaking.Bad.S01E04.1080p.WEB-DL 👤 80 💾 1.5 GB",
+                  "infoHash": "e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val media = Media(
+            id = "1396",
+            imdbId = "tt0903747",
+            title = "Breaking Bad",
+            type = MediaType.TV_SHOW
+        )
+
+        val filters = SearchFilters(season = 1, episode = 4)
+        val result = torrentioProvider.searchByMedia(media, filters)
+
+        assertThat(result).isInstanceOf(ProviderResult.Success::class.java)
+
+        val recordedRequest = mockWebServerRule.takeRequest()
+        assertThat(recordedRequest).isNotNull()
+        assertThat(recordedRequest!!.path).contains("tt0903747:1:4")
+    }
 }
