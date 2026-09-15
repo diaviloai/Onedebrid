@@ -1,13 +1,14 @@
-name: Build Debug APK
+name: Build and Test Debug APK
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch: # Enables manual run button in GitHub web and mobile app
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,6 +34,9 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Run Dedicated Integration Tests
+        run: ./gradlew testDebugUnitTest --tests "com.onedebrid.app.provider.MediaDiscoveryIntegrationTest"
 
       - name: Build debug APK
         run: ./gradlew assembleDebug
