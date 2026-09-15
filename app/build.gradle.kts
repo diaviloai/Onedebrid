@@ -87,7 +87,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     
     // Material Design - required for XML theme (Theme.Material3.DayNight.NoActionBar)
-implementation(libs.material)
+    implementation(libs.material)
 
     // Compose
     implementation(platform(libs.androidx.compose.bom))
@@ -138,6 +138,8 @@ implementation(libs.material)
 
     // Testing
     testImplementation(libs.junit)
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.androidx.compose.bom))
