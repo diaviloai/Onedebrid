@@ -11,7 +11,6 @@ import com.onedebrid.app.provider.metadata.tmdb.TmdbMetadataProvider
 import com.onedebrid.app.provider.search.SearchFilters
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
 import com.onedebrid.app.provider.search.torrentio.TorrentioSearchProvider
-import com.onedebrid.app.test.MockWebServerRule
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Rule
@@ -39,7 +38,6 @@ class MediaDiscoveryIntegrationTest {
 
     @Test
     fun endToEnd_cachedMovieDiscoveryToStreamResolution_success() = runTest {
-        // 1. Queue Torrentio streams response containing a valid infoHash
         mockWebServerRule.enqueueResponse(
             """
             {
@@ -54,9 +52,8 @@ class MediaDiscoveryIntegrationTest {
             """.trimIndent()
         )
 
-        // 2. Queue Real-Debrid API sequence: addMagnet -> selectFiles -> getTorrentInfo -> unrestrictLink
         mockWebServerRule.enqueueResponse("""{"id":"RD_MAG_123","uri":"magnet:?xt=urn:btih:a1b2c3..."}""")
-        mockWebServerRule.enqueueResponse("""{}""") // selectFiles OK
+        mockWebServerRule.enqueueResponse("""{}""")
         mockWebServerRule.enqueueResponse(
             """
             {
@@ -78,7 +75,6 @@ class MediaDiscoveryIntegrationTest {
             """.trimIndent()
         )
 
-        // Step A: Search candidates via Torrentio for a movie with IMDb ID
         val media = Media(
             id = "550",
             imdbId = "tt0137523",
@@ -94,7 +90,6 @@ class MediaDiscoveryIntegrationTest {
         val selectedCandidate = candidates.first()
         assertThat(selectedCandidate.hash).isEqualTo("a1b2c3d4e5f60718293a4b5c6d7e8f9012345678")
 
-        // Step B: Resolve candidate stream via Real-Debrid
         val streamResult = realDebridProvider.resolveStream(selectedCandidate.hash!!)
         assertThat(streamResult).isInstanceOf(ProviderResult.Success::class.java)
 
