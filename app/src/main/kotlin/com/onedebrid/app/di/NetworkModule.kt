@@ -3,7 +3,7 @@ package com.onedebrid.app.di
 import com.onedebrid.app.provider.debrid.realdebrid.RealDebridApi
 import com.onedebrid.app.provider.metadata.tmdb.TmdbApi
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
