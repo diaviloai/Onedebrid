@@ -7,6 +7,8 @@ import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.SearchResult
 import com.onedebrid.app.usecase.SearchMediaUseCase
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -16,15 +18,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.mockito.Mockito.`when`
-import org.mockito.Mockito.mock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
 
-    private val searchMediaUseCase: SearchMediaUseCase = mock(SearchMediaUseCase::class.java)
+    private val searchMediaUseCase: SearchMediaUseCase = mockk()
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val dispatchers = CoroutineDispatchers.Test(testDispatcher)
+    private val dispatchers = CoroutineDispatchers(
+        main = testDispatcher,
+        io = testDispatcher,
+        default = testDispatcher
+    )
 
     private lateinit var testScope: TestScope
     private lateinit var coordinator: SearchCoordinator
@@ -61,9 +65,7 @@ class SearchCoordinatorTest {
             )
         )
 
-        `when`(searchMediaUseCase(query, profileId)).thenReturn(
-            RepositoryResult.Success(expectedResults)
-        )
+        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Success(expectedResults)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
@@ -79,9 +81,7 @@ class SearchCoordinatorTest {
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
 
-        `when`(searchMediaUseCase(query, profileId)).thenReturn(
-            RepositoryResult.Failure(expectedError)
-        )
+        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Failure(expectedError)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
@@ -96,9 +96,7 @@ class SearchCoordinatorTest {
         val query = "Inception"
         val profileId = "profile_1"
 
-        `when`(searchMediaUseCase(query, profileId)).thenReturn(
-            RepositoryResult.Success(emptyList())
-        )
+        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Success(emptyList())
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
