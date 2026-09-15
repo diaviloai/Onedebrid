@@ -1,9 +1,8 @@
 package com.onedebrid.app.coordinator
 
 import com.google.common.truth.Truth.assertThat
-import com.onedebrid.app.domain.error.OneDebridError
-import com.onedebrid.app.domain.model.AccountInfo
-import com.onedebrid.app.domain.model.ProviderResult
+import com.onedebrid.app.domain.error.ProviderError
+import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.provider.debrid.DebridProvider
@@ -62,38 +61,27 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun fakeDebridProvider_handlesFailureCorrectly() = runTest {
-        mockDebridProvider.nextResult = ProviderResult.Failure(
-            OneDebridError.ProviderError("Stream unavailable")
+        mockDebridProvider.nextResult = ProviderResult.Error(
+            ProviderError.NoStreamsFound("Stream unavailable")
         )
 
         val result = mockDebridProvider.resolveStream("invalid_hash")
 
-        assertThat(result).isInstanceOf(ProviderResult.Failure::class.java)
-        val error = (result as ProviderResult.Failure).error
-        assertThat(error).isInstanceOf(OneDebridError.ProviderError::class.java)
+        assertThat(result).isInstanceOf(ProviderResult.Error::class.java)
+        val error = (result as ProviderResult.Error).error
+        assertThat(error).isInstanceOf(ProviderError.NoStreamsFound::class.java)
     }
 }
 
 /**
- * Fake DebridProvider implementation fully satisfying the domain contract.
+ * Fake DebridProvider implementation matching domain interfaces.
  */
 private class FakeDebridProvider : DebridProvider {
-    override val id: String = "fake_debrid"
-    override val displayName: String = "Fake Debrid"
-
-    var nextResult: ProviderResult<StreamSource> = ProviderResult.Failure(
-        OneDebridError.Unknown("No fake result configured")
+    var nextResult: ProviderResult<StreamSource> = ProviderResult.Error(
+        ProviderError.Unknown("No fake result configured")
     )
 
     override suspend fun resolveStream(hash: String): ProviderResult<StreamSource> {
         return nextResult
-    }
-
-    override suspend fun verifyAccount(): ProviderResult<AccountInfo> {
-        return ProviderResult.Failure(OneDebridError.Unknown("Not implemented"))
-    }
-
-    override suspend fun checkCache(hashes: List<String>): ProviderResult<Map<String, Boolean>> {
-        return ProviderResult.Success(hashes.associateWith { true })
     }
 }
