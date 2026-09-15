@@ -12,22 +12,18 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
-import org.mockito.kotlin.verifyNoInteractions
-import org.mockito.kotlin.whenever
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
+import org.mockito.Mockito.verifyNoInteractions
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionCoordinatorTest {
 
-    private val profileRepository: ProfileRepository = mock()
-    private val sessionRepository: SessionRepository = mock()
+    private val profileRepository: ProfileRepository = mock(ProfileRepository::class.java)
+    private val sessionRepository: SessionRepository = mock(SessionRepository::class.java)
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val dispatchers = CoroutineDispatchers(
-        main = testDispatcher,
-        io = testDispatcher,
-        default = testDispatcher
-    )
+    private val dispatchers = CoroutineDispatchers.Test(testDispatcher)
 
     private lateinit var testScope: TestScope
     private lateinit var coordinator: SessionCoordinator
@@ -46,7 +42,7 @@ class SessionCoordinatorTest {
     @Test
     fun `start initialises session when active profile is emitted`() = testScope.runTest {
         val activeProfileFlow = MutableSharedFlow<UserProfile?>()
-        whenever(profileRepository.observeActiveProfile()).thenReturn(activeProfileFlow)
+        `when`(profileRepository.observeActiveProfile()).thenReturn(activeProfileFlow)
 
         coordinator.start()
 
@@ -63,7 +59,7 @@ class SessionCoordinatorTest {
     @Test
     fun `start ignores null active profile emissions`() = testScope.runTest {
         val activeProfileFlow = MutableSharedFlow<UserProfile?>()
-        whenever(profileRepository.observeActiveProfile()).thenReturn(activeProfileFlow)
+        `when`(profileRepository.observeActiveProfile()).thenReturn(activeProfileFlow)
 
         coordinator.start()
 

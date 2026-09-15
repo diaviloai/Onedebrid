@@ -16,19 +16,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.mock
-import org.mockito.kotlin.whenever
+import org.mockito.Mockito.`when`
+import org.mockito.Mockito.mock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
 
-    private val searchMediaUseCase: SearchMediaUseCase = mock()
+    private val searchMediaUseCase: SearchMediaUseCase = mock(SearchMediaUseCase::class.java)
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val dispatchers = CoroutineDispatchers(
-        main = testDispatcher,
-        io = testDispatcher,
-        default = testDispatcher
-    )
+    private val dispatchers = CoroutineDispatchers.Test(testDispatcher)
 
     private lateinit var testScope: TestScope
     private lateinit var coordinator: SearchCoordinator
@@ -65,7 +61,7 @@ class SearchCoordinatorTest {
             )
         )
 
-        whenever(searchMediaUseCase(query, profileId)).thenReturn(
+        `when`(searchMediaUseCase(query, profileId)).thenReturn(
             RepositoryResult.Success(expectedResults)
         )
 
@@ -83,7 +79,7 @@ class SearchCoordinatorTest {
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
 
-        whenever(searchMediaUseCase(query, profileId)).thenReturn(
+        `when`(searchMediaUseCase(query, profileId)).thenReturn(
             RepositoryResult.Failure(expectedError)
         )
 
@@ -100,7 +96,7 @@ class SearchCoordinatorTest {
         val query = "Inception"
         val profileId = "profile_1"
 
-        whenever(searchMediaUseCase(query, profileId)).thenReturn(
+        `when`(searchMediaUseCase(query, profileId)).thenReturn(
             RepositoryResult.Success(emptyList())
         )
 
