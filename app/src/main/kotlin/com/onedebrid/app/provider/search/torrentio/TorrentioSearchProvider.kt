@@ -27,7 +27,7 @@ class TorrentioSearchProvider @Inject constructor(
         query: String,
         filters: SearchFilters
     ): ProviderResult<List<SearchResult>> {
-        // Torrentio cannot perform free-text searches.
+        // Torrentio cannot perform free-text search.
         return ProviderError.NotFound.asFailure()
     }
 
@@ -57,7 +57,7 @@ class TorrentioSearchProvider @Inject constructor(
 
         return try {
             val response = api.getStreams(type = typePath, id = requestIdentifier)
-            val candidates = response.streams.mapNotNull { it.toStreamCandidate(media.id) }
+            val candidates = response.streams.mapNotNull { it.toStreamCandidate() }
             candidates.asSuccess()
         } catch (e: HttpException) {
             e.toProviderError().asFailure()
@@ -68,21 +68,25 @@ class TorrentioSearchProvider @Inject constructor(
         }
     }
 
-    private fun TorrentioStreamDto.toStreamCandidate(mediaId: String): StreamCandidate? {
-        val hash = infoHash ?: return null
+    private fun TorrentioStreamDto.toStreamCandidate(): StreamCandidate? {
+        val hash = infoHash ?: extractHashFromUrl(url) ?: return null
         val fullTitle = title ?: name ?: "Unknown Release"
 
         return StreamCandidate(
-            id = hash,
-            mediaId = mediaId,
             title = fullTitle,
-            infoHash = hash,
-            fileIndex = fileIdx,
-            quality = parseQuality(fullTitle),
+            hash = hash,
+            magnetUrl = url,
+            sizeBytes = behaviorHints?.videoSize ?: parseSizeBytes(fullTitle),
             seeders = parseSeeders(fullTitle),
-            sizeBytes = parseSizeBytes(fullTitle),
-            sourceProvider = id
+            quality = parseQuality(fullTitle)
         )
+    }
+
+    private fun extractHashFromUrl(url: String?): String? {
+        if (url == null) return null
+        // Fallback for Torrentio URL debrid resolve format containing the hash
+        val match = Regex("/([a-fA-F0-9]{40})(/|$)").find(url)
+        return match?.groupValues?.get(1)
     }
 
     private fun parseQuality(title: String): VideoQuality = when {
@@ -98,15 +102,15 @@ class TorrentioSearchProvider @Inject constructor(
         return match?.groupValues?.get(1)?.toIntOrNull() ?: 0
     }
 
-    private fun parseSizeBytes(title: String): Long {
+    private fun parseSizeBytes(title: String): Long? {
         val match = Regex("💾\\s*([\\d.]+)\\s*(GB|MB)", RegexOption.IGNORE_CASE).find(title)
-            ?: return 0L
-        val value = match.groupValues[1].toDoubleOrNull() ?: return 0L
+            ?: return null
+        val value = match.groupValues[1].toDoubleOrNull() ?: return null
         val unit = match.groupValues[2].uppercase()
         return when (unit) {
             "GB" -> (value * 1024 * 1024 * 1024).toLong()
             "MB" -> (value * 1024 * 1024).toLong()
-            else -> 0L
+            else -> null
         }
     }
 
