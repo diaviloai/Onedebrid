@@ -1,6 +1,7 @@
 package com.onedebrid.app.provider
 
 import com.google.common.truth.Truth.assertThat
+import com.onedebrid.app.domain.error.ProviderError
 import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
@@ -163,5 +164,20 @@ class MediaDiscoveryIntegrationTest {
         val recordedRequest = mockWebServerRule.takeRequest()
         assertThat(recordedRequest).isNotNull()
         assertThat(recordedRequest!!.path).contains("tt0903747:1:4")
+    }
+
+    @Test
+    fun realDebrid_unauthorizedHttp401_returnsProviderErrorAuthentication() = runTest {
+        // Enqueue 401 Unauthorized response from Real-Debrid API
+        mockWebServerRule.enqueueResponse(
+            body = """{"error": "bad_token", "error_code": 8}""",
+            code = 401
+        )
+
+        val result = realDebridProvider.resolveStream("a1b2c3d4e5f60718293a4b5c6d7e8f9012345678")
+
+        assertThat(result).isInstanceOf(ProviderResult.Error::class.java)
+        val error = (result as ProviderResult.Error).error
+        assertThat(error).isInstanceOf(ProviderError.AuthenticationFailed::class.java)
     }
 }
