@@ -24,7 +24,7 @@ class NavigationCoordinatorTest {
 
     private lateinit var navigationCoordinator: NavigationCoordinator
 
-    @Before
+    @Before 
     fun setup() {
         navigationCoordinator = NavigationCoordinator()
     }
