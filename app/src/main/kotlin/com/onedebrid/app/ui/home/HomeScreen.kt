@@ -147,10 +147,7 @@ private fun ContinueWatchingSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(
-                items = items,
-                key = { item -> item.mediaId }
-            ) { item ->
+            items(items) { item: ContinueWatchingItem ->
                 Card(
                     modifier = Modifier
                         .width(160.dp)
@@ -191,10 +188,7 @@ private fun TrendingSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(
-                items = items,
-                key = { item -> item.id }
-            ) { item ->
+            items(items) { item: Media ->
                 Card(
                     modifier = Modifier
                         .width(120.dp)

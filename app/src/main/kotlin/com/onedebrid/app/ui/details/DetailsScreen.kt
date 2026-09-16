@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -111,10 +111,7 @@ fun DetailsScreen(
                             )
                         } else {
                             LazyColumn {
-                                items(
-                                    items = state.streams,
-                                    key = { candidate -> candidate.id }
-                                ) { candidate ->
+                                itemsIndexed(state.streams) { index, candidate ->
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
