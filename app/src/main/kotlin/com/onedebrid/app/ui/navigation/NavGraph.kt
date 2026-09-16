@@ -6,18 +6,11 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.ui.details.DetailsScreen
 import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
 import com.onedebrid.app.ui.settings.SettingsScreen
-
-data class PlayerNavArgs(
-    val mediaId: String,
-    val episodeId: String? = null,
-    val resumeMs: Long? = null
-)
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")

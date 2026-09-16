@@ -144,7 +144,7 @@ private fun ContinueWatchingSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = item.title ?: item.mediaId,
+                                text = item.mediaTitle ?: item.mediaId,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 modifier = Modifier
@@ -153,7 +153,9 @@ private fun ContinueWatchingSection(
                             )
                             IconButton(
                                 onClick = { onRemoveClick(item) },
-                                modifier = Modifier.height(24.dp).width(24.dp)
+                                modifier = Modifier
+                                    .height(24.dp)
+                                    .width(24.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
@@ -163,8 +165,9 @@ private fun ContinueWatchingSection(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         val duration = item.durationMs
+                        val position = item.positionMs ?: 0L
                         if (duration != null && duration > 0) {
-                            val progress = (item.positionMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                            val progress = (position.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
                             Text(
                                 text = "${(progress * 100).toInt()}% completed",
                                 style = MaterialTheme.typography.labelSmall,
