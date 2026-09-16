@@ -10,16 +10,16 @@ import com.onedebrid.app.domain.model.SessionState
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Before
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -66,22 +66,18 @@ class SessionCoordinatorTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
-    private lateinit var testScope: TestScope
-    private lateinit var coordinator: SessionCoordinator
+    @Test
+    fun `start initialises session when active profile is emitted`() = runTest(testDispatcher) {
+        val coordinatorJob = SupervisorJob()
+        val coordinatorScope = CoroutineScope(testDispatcher + coordinatorJob)
 
-    @Before
-    fun setUp() {
-        testScope = TestScope(testDispatcher)
-        coordinator = SessionCoordinator(
+        val coordinator = SessionCoordinator(
             profileRepository = fakeProfileRepository,
             sessionRepository = fakeSessionRepository,
             dispatchers = dispatchers,
-            scope = testScope
+            scope = coordinatorScope
         )
-    }
 
-    @Test
-    fun `start initialises session when active profile is emitted`() = testScope.runTest {
         coordinator.start()
 
         val profile = UserProfile(
@@ -94,6 +90,6 @@ class SessionCoordinatorTest {
         assertEquals(1, fakeSessionRepository.initialisedProfiles.size)
         assertEquals(profile, fakeSessionRepository.initialisedProfiles.first())
 
-        testScope.cancel()
+        coordinatorScope.cancel()
     }
 }

@@ -13,11 +13,12 @@ import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.usecase.SearchMediaUseCase
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -93,31 +94,43 @@ class SearchCoordinatorTest {
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var searchMediaUseCase: SearchMediaUseCase
-    private lateinit var testScope: TestScope
-    private lateinit var coordinator: SearchCoordinator
 
     @Before
     fun setUp() {
-        testScope = TestScope(testDispatcher)
         searchMediaUseCase = SearchMediaUseCase(
             mediaRepository = fakeMediaRepository,
             searchRepository = fakeSearchRepository,
             dispatchers = dispatchers
         )
-        coordinator = SearchCoordinator(
+    }
+
+    @Test
+    fun `initial state is Idle`() = runTest(testDispatcher) {
+        val coordinatorJob = SupervisorJob()
+        val coordinatorScope = CoroutineScope(testDispatcher + coordinatorJob)
+
+        val coordinator = SearchCoordinator(
             searchMediaUseCase = searchMediaUseCase,
             dispatchers = dispatchers,
-            scope = testScope
+            scope = coordinatorScope
         )
-    }
 
-    @Test
-    fun `initial state is Idle`() {
         assertEquals(SearchState.Idle, coordinator.state.value)
+
+        coordinatorScope.cancel()
     }
 
     @Test
-    fun `search updates state to Results on success`() = testScope.runTest {
+    fun `search updates state to Results on success`() = runTest(testDispatcher) {
+        val coordinatorJob = SupervisorJob()
+        val coordinatorScope = CoroutineScope(testDispatcher + coordinatorJob)
+
+        val coordinator = SearchCoordinator(
+            searchMediaUseCase = searchMediaUseCase,
+            dispatchers = dispatchers,
+            scope = coordinatorScope
+        )
+
         val query = "Inception"
         val profileId = "profile_1"
         val expectedResults = listOf(
@@ -142,11 +155,20 @@ class SearchCoordinatorTest {
         assertTrue(currentState is SearchState.Results)
         assertEquals(expectedResults, (currentState as SearchState.Results).results)
 
-        testScope.cancel()
+        coordinatorScope.cancel()
     }
 
     @Test
-    fun `search updates state to Error on failure`() = testScope.runTest {
+    fun `search updates state to Error on failure`() = runTest(testDispatcher) {
+        val coordinatorJob = SupervisorJob()
+        val coordinatorScope = CoroutineScope(testDispatcher + coordinatorJob)
+
+        val coordinator = SearchCoordinator(
+            searchMediaUseCase = searchMediaUseCase,
+            dispatchers = dispatchers,
+            scope = coordinatorScope
+        )
+
         val query = "Unknown"
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
@@ -160,11 +182,20 @@ class SearchCoordinatorTest {
         assertTrue(currentState is SearchState.Error)
         assertEquals(expectedError, (currentState as SearchState.Error).error)
 
-        testScope.cancel()
+        coordinatorScope.cancel()
     }
 
     @Test
-    fun `clear resets state to Idle`() = testScope.runTest {
+    fun `clear resets state to Idle`() = runTest(testDispatcher) {
+        val coordinatorJob = SupervisorJob()
+        val coordinatorScope = CoroutineScope(testDispatcher + coordinatorJob)
+
+        val coordinator = SearchCoordinator(
+            searchMediaUseCase = searchMediaUseCase,
+            dispatchers = dispatchers,
+            scope = coordinatorScope
+        )
+
         val query = "Inception"
         val profileId = "profile_1"
 
@@ -177,6 +208,6 @@ class SearchCoordinatorTest {
 
         assertEquals(SearchState.Idle, coordinator.state.value)
 
-        testScope.cancel()
+        coordinatorScope.cancel()
     }
 }
