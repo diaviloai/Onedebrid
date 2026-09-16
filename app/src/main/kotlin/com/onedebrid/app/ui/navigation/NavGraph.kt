@@ -13,22 +13,26 @@ import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
 import com.onedebrid.app.ui.settings.SettingsScreen
 
+data class PlayerNavArgs(
+    val mediaId: String,
+    val episodeId: String? = null,
+    val resumeMs: Long? = null
+)
+
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Search : Screen("search")
     object Settings : Screen("settings")
-    object Details : Screen("details/{mediaType}/{mediaId}?resumePositionMs={resumePositionMs}") {
-        fun createRoute(mediaType: MediaType, mediaId: String, resumePositionMs: Long? = null): String {
-            return if (resumePositionMs != null) {
-                "details/${mediaType.name.lowercase()}/$mediaId?resumePositionMs=$resumePositionMs"
-            } else {
-                "details/${mediaType.name.lowercase()}/$mediaId"
-            }
+    object Details : Screen("details/{mediaId}") {
+        fun createRoute(mediaId: String): String {
+            return "details/$mediaId"
         }
     }
-    object Player : Screen("player/{mediaType}/{mediaId}?episodeId={episodeId}&streamUrl={streamUrl}") {
-        fun createRoute(mediaType: MediaType, mediaId: String, episodeId: String?, streamUrl: String): String {
-            return "player/${mediaType.name.lowercase()}/$mediaId?episodeId=${episodeId ?: ""}&streamUrl=$streamUrl"
+    object Player : Screen("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}") {
+        fun createRoute(args: PlayerNavArgs): String {
+            val ep = args.episodeId ?: ""
+            val pos = args.resumeMs ?: -1L
+            return "player/${args.mediaId}?episodeId=$ep&resumeMs=$pos"
         }
     }
 }
@@ -41,8 +45,8 @@ fun NavGraph(navController: NavHostController) {
     ) {
         composable(Screen.Home.route) {
             HomeScreen(
-                onNavigateToDetails = { mediaType, mediaId, resumePositionMs ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId, resumePositionMs))
+                onNavigateToDetails = { mediaId ->
+                    navController.navigate(Screen.Details.createRoute(mediaId))
                 },
                 onNavigateToSearch = {
                     navController.navigate(Screen.Search.route)
@@ -50,8 +54,8 @@ fun NavGraph(navController: NavHostController) {
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route)
                 },
-                onNavigateToPlayer = { mediaType, mediaId, episodeId, streamUrl ->
-                    navController.navigate(Screen.Player.createRoute(mediaType, mediaId, episodeId, streamUrl))
+                onNavigateToPlayer = { navArgs ->
+                    navController.navigate(Screen.Player.createRoute(navArgs))
                 }
             )
         }
@@ -59,23 +63,19 @@ fun NavGraph(navController: NavHostController) {
         composable(
             route = Screen.Details.route,
             arguments = listOf(
-                navArgument("mediaType") { type = NavType.StringType },
-                navArgument("mediaId") { type = NavType.StringType },
-                navArgument("resumePositionMs") {
-                    type = NavType.LongType
-                    defaultValue = -1L
-                }
+                navArgument("mediaId") { type = NavType.StringType }
             )
         ) {
             DetailsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlayer = { mediaType, mediaId, episodeId, candidate ->
+                onNavigateToPlayer = { _, mediaId, episodeId, candidate ->
                     navController.navigate(
                         Screen.Player.createRoute(
-                            mediaType,
-                            mediaId,
-                            episodeId,
-                            candidate.title
+                            PlayerNavArgs(
+                                mediaId = mediaId,
+                                episodeId = episodeId,
+                                resumeMs = null
+                            )
                         )
                     )
                 }
@@ -84,8 +84,8 @@ fun NavGraph(navController: NavHostController) {
 
         composable(Screen.Search.route) {
             SearchScreen(
-                onNavigateToDetails = { mediaType, mediaId ->
-                    navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
+                onNavigateToDetails = { mediaId ->
+                    navController.navigate(Screen.Details.createRoute(mediaId))
                 }
             )
         }
@@ -97,13 +97,15 @@ fun NavGraph(navController: NavHostController) {
         composable(
             route = Screen.Player.route,
             arguments = listOf(
-                navArgument("mediaType") { type = NavType.StringType },
                 navArgument("mediaId") { type = NavType.StringType },
                 navArgument("episodeId") {
                     type = NavType.StringType
                     nullable = true
                 },
-                navArgument("streamUrl") { type = NavType.StringType }
+                navArgument("resumeMs") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                }
             )
         ) {
             PlayerScreen(
@@ -112,4 +114,3 @@ fun NavGraph(navController: NavHostController) {
         }
     }
 }
-
