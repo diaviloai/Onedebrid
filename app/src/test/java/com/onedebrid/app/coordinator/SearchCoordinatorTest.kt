@@ -14,6 +14,7 @@ import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.usecase.SearchMediaUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.TestScope
@@ -140,6 +141,8 @@ class SearchCoordinatorTest {
         val currentState = coordinator.state.value
         assertTrue(currentState is SearchState.Results)
         assertEquals(expectedResults, (currentState as SearchState.Results).results)
+
+        testScope.cancel()
     }
 
     @Test
@@ -156,6 +159,8 @@ class SearchCoordinatorTest {
         val currentState = coordinator.state.value
         assertTrue(currentState is SearchState.Error)
         assertEquals(expectedError, (currentState as SearchState.Error).error)
+
+        testScope.cancel()
     }
 
     @Test
@@ -171,5 +176,7 @@ class SearchCoordinatorTest {
         coordinator.clear()
 
         assertEquals(SearchState.Idle, coordinator.state.value)
+
+        testScope.cancel()
     }
 }

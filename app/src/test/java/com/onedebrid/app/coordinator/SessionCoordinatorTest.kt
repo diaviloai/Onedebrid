@@ -11,6 +11,7 @@ import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.TestScope
@@ -92,5 +93,7 @@ class SessionCoordinatorTest {
 
         assertEquals(1, fakeSessionRepository.initialisedProfiles.size)
         assertEquals(profile, fakeSessionRepository.initialisedProfiles.first())
+
+        testScope.cancel()
     }
 }
