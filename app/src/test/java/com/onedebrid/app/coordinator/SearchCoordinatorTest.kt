@@ -7,8 +7,7 @@ import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.SearchResult
 import com.onedebrid.app.usecase.SearchMediaUseCase
-import io.mockk.coEvery
-import io.mockk.mockk
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -22,13 +21,27 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
 
-    private val searchMediaUseCase: SearchMediaUseCase = mockk()
+    private class FakeSearchMediaUseCase : SearchMediaUseCase {
+        var resultToReturn: RepositoryResult<List<SearchResult>> = RepositoryResult.Success(emptyList())
+        var lastQuery: String? = null
+        var lastProfileId: String? = null
+
+        override suspend fun invoke(query: String, profileId: String): RepositoryResult<List<SearchResult>> {
+            lastQuery = query
+            lastProfileId = profileId
+            return resultToReturn
+        }
+    }
+
+    private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
+        override val main: CoroutineDispatcher = dispatcher
+        override val io: CoroutineDispatcher = dispatcher
+        override val default: CoroutineDispatcher = dispatcher
+    }
+
+    private val fakeSearchMediaUseCase = FakeSearchMediaUseCase()
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val dispatchers = CoroutineDispatchers(
-        main = testDispatcher,
-        io = testDispatcher,
-        default = testDispatcher
-    )
+    private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var testScope: TestScope
     private lateinit var coordinator: SearchCoordinator
@@ -37,7 +50,7 @@ class SearchCoordinatorTest {
     fun setUp() {
         testScope = TestScope(testDispatcher)
         coordinator = SearchCoordinator(
-            searchMediaUseCase = searchMediaUseCase,
+            searchMediaUseCase = fakeSearchMediaUseCase,
             dispatchers = dispatchers,
             scope = testScope
         )
@@ -65,10 +78,13 @@ class SearchCoordinatorTest {
             )
         )
 
-        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Success(expectedResults)
+        fakeSearchMediaUseCase.resultToReturn = RepositoryResult.Success(expectedResults)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
+
+        assertEquals(query, fakeSearchMediaUseCase.lastQuery)
+        assertEquals(profileId, fakeSearchMediaUseCase.lastProfileId)
 
         val currentState = coordinator.state.value
         assertTrue(currentState is SearchState.Results)
@@ -81,7 +97,7 @@ class SearchCoordinatorTest {
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
 
-        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Failure(expectedError)
+        fakeSearchMediaUseCase.resultToReturn = RepositoryResult.Failure(expectedError)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
@@ -96,7 +112,7 @@ class SearchCoordinatorTest {
         val query = "Inception"
         val profileId = "profile_1"
 
-        coEvery { searchMediaUseCase(query, profileId) } returns RepositoryResult.Success(emptyList())
+        fakeSearchMediaUseCase.resultToReturn = RepositoryResult.Success(emptyList())
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
