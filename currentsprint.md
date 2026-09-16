@@ -1,20 +1,37 @@
 # Current Sprint Document: OneDebrid
 
-## 1. Objectives & Focus
-- Ensure robust end-to-end compilation across navigation, viewmodels, and screens.
-- Enhance UI/UX simplicity across media details and stream selection workflows.
+## Active Phase Summary
+- **Current Milestone**: Core System Architecture & Coordinator Layer Verification
+- **Focus Area**: Unit Testing, Test Suite Stabilization, Coroutine Lifecycle Management
 
-## 2. Completed Tasks
-- [x] **Navigation & Build Alignment**: Standardized `PlayerNavArgs` and updated `NavGraph.kt` routing parameters to fix build failures across `HomeScreen`, `DetailsScreen`, and `PlayerScreen`.
-- [x] **DetailsScreen Error Handling**: Mapped `AppError` domain types safely in `DetailsScreen.kt` and eliminated missing string resource references.
-- [x] **Stream Picker UI Enhancements**: Replaced basic button list in `StreamPickerBottomSheet` with styled `StreamCandidateRow` cards featuring quality badges (4K, 1080p, 720p, SD), formatted file sizes, and clean fallback states for empty streams.
-- [x] **CI Verification**: Verified green builds for `assembleDebug` on GitHub Actions pipeline.
+---
 
-## 3. Active / Next Up Backlog
-- [ ] **Player Screen Integration**: Verify `PlayerScreen` handling of `PlayerNavArgs` during playback initialization, buffering states, and error handling.
-- [ ] **Player Lifecycle & Progress Sync**: Ensure playback session teardown and position tracking save cleanly on back navigation or session end.
-- [ ] **String Resources Cleanup**: Audit hardcoded UI strings and migrate to `strings.xml`.
+## Session Changelog & Completed Tasks
 
-## 4. Architectural Guiding Principles
-- **UI/UX Simplicity**: Keep stream picking and media navigation as simple and clear as possible for the user.
-- **Domain Decoupling**: ViewModels and Navigation accept domain types (`MediaType`, `StreamCandidate`, `PlayerNavArgs`) rather than pre-serialized raw strings.
+### Test Suite & Architecture Stabilization
+- **Coordinator Unit Testing**: Added and stabilized comprehensive unit tests for `SearchCoordinatorTest` and `SessionCoordinatorTest`.
+- **Interface Alignment**: Resolved build errors by aligning unit test fakes with production contracts (`MediaRepository`, `SearchRepository`, `ProfileRepository`, and `AppError`).
+- **Coroutine Scope Fixes**: Resolved `UncompletedCoroutinesError` and `JobCancellationException` by isolating long-running background collection flows inside `SessionCoordinator` and `SearchCoordinator` using child `SupervisorJob` instances (`CoroutineScope(testDispatcher + supervisorJob)`) rather than executing directly on `testScope`.
+- **Build Status**: `./gradlew testDebugUnitTest` is fully passing green.
+
+---
+
+## Active Architecture & Known Constraints
+
+### Repository Contracts
+- **`MediaRepository`**: Supports `getMediaDetails`, `getEpisodes`, `getEpisodeById`, `resolveStream`, `checkCacheStatus`, `search`, and `searchStreamsByMedia`.
+- **`SearchRepository`**: Exposes reactive search history observation via `observeSearchHistory(profileId: String): Flow<List<String>>`, along with `addSearchQuery`, `removeSearchQuery`, and `clearSearchHistory`.
+- **`AppError` Model**: Utilizes structured sealed interface instances (`NoCachedStreamAvailable`, `StreamResolutionFailed`, `NotAuthenticated`, `NoNetworkConnection`, `AllProvidersUnavailable`, `LocalStorageError`, `Unknown`).
+
+---
+
+## Open Tasks & Next Steps
+
+1. **Expand Coordinator Test Coverage**:
+   - Add unit tests for `PlaybackCoordinatorTest` and `NavigationCoordinatorTest` using the established `SupervisorJob` testing pattern.
+2. **ViewModel Layer Wiring**:
+   - Verify ViewModel integration with stabilized Coordinators (`SearchViewModel`, `PlayerViewModel`, `SessionViewModel`).
+3. **Provider Integration**:
+   - Transition stubbed media and search providers to real implementations (e.g., TMDB, Torrentio, Real-Debrid API integration).
+4. **AppError Standardizations**:
+   - Conduct planned error-model review (e.g., introducing `AppError.ValidationError` for edge-case ID mismatches).
