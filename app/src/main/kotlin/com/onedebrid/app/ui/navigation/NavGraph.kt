@@ -75,7 +75,7 @@ fun NavGraph(navController: NavHostController) {
                             mediaType,
                             mediaId,
                             episodeId,
-                            candidate.originalTitle
+                            candidate.title
                         )
                     )
                 }
@@ -84,7 +84,6 @@ fun NavGraph(navController: NavHostController) {
 
         composable(Screen.Search.route) {
             SearchScreen(
-                onNavigateBack = { navController.popBackStack() },
                 onNavigateToDetails = { mediaType, mediaId ->
                     navController.navigate(Screen.Details.createRoute(mediaType, mediaId))
                 }
@@ -92,9 +91,7 @@ fun NavGraph(navController: NavHostController) {
         }
 
         composable(Screen.Settings.route) {
-            SettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
+            SettingsScreen()
         }
 
         composable(

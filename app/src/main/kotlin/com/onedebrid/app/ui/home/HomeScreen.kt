@@ -5,9 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -149,7 +147,10 @@ private fun ContinueWatchingSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(items) { item ->
+            items(
+                items = items,
+                key = { item -> item.mediaId }
+            ) { item ->
                 Card(
                     modifier = Modifier
                         .width(160.dp)
@@ -190,7 +191,10 @@ private fun TrendingSection(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(items) { item ->
+            items(
+                items = items,
+                key = { item -> item.id }
+            ) { item ->
                 Card(
                     modifier = Modifier
                         .width(120.dp)

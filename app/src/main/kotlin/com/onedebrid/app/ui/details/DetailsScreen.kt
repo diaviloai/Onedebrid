@@ -111,7 +111,10 @@ fun DetailsScreen(
                             )
                         } else {
                             LazyColumn {
-                                items(state.streams) { candidate ->
+                                items(
+                                    items = state.streams,
+                                    key = { candidate -> candidate.id }
+                                ) { candidate ->
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -124,7 +127,7 @@ fun DetailsScreen(
                                             )
                                             candidate.quality?.let { quality ->
                                                 Text(
-                                                    text = quality,
+                                                    text = quality.name,
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
