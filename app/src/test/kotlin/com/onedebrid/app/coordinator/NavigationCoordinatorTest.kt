@@ -1,5 +1,6 @@
 package com.onedebrid.app.coordinator
 
+import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.ui.navigation.PlayerNavArgs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -24,7 +25,7 @@ class NavigationCoordinatorTest {
 
     private lateinit var navigationCoordinator: NavigationCoordinator
 
-    @Before 
+    @Before
     fun setup() {
         navigationCoordinator = NavigationCoordinator()
     }
@@ -35,27 +36,27 @@ class NavigationCoordinatorTest {
     }
 
     @Test
-    fun `navigateToPlayer emits expected PlayerNavArgs`() = testScope.runTest {
-        val emittedArgs = mutableListOf<PlayerNavArgs>()
+    fun `navigateToPlayer emits expected NavigationTarget or NavArgs`() = testScope.runTest {
+        val emittedEvents = mutableListOf<NavigationTarget>()
 
         val job = coordinatorScope.launch {
-            navigationCoordinator.navigateToPlayer.collect { args ->
-                emittedArgs.add(args)
+            navigationCoordinator.navigationEvents.collect { target ->
+                emittedEvents.add(target)
             }
         }
 
-        val expectedArgs = PlayerNavArgs(
+        val target = NavigationTarget.Player(
+            mediaType = MediaType.MOVIE,
             mediaId = "media_123",
             episodeId = "ep_456",
-            resumeMs = 5000L,
-            preferredSource = null
+            preferredSource = "source_1"
         )
 
-        navigationCoordinator.navigateToPlayer(expectedArgs)
+        navigationCoordinator.navigateTo(target)
         advanceUntilIdle()
 
-        assertEquals(1, emittedArgs.size)
-        assertEquals(expectedArgs, emittedArgs.first())
+        assertEquals(1, emittedEvents.size)
+        assertEquals(target, emittedEvents.first())
 
         job.cancel()
     }
