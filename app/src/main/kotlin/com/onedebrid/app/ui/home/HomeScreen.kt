@@ -144,7 +144,7 @@ private fun ContinueWatchingSection(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = item.mediaTitle ?: item.mediaId,
+                                text = item.title ?: item.mediaId,
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 1,
                                 modifier = Modifier
