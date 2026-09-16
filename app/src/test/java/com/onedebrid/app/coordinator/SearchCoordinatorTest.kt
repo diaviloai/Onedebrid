@@ -31,10 +31,10 @@ class SearchCoordinatorTest {
     private class FakeMediaRepository : MediaRepository {
         var searchResult: RepositoryResult<List<SearchResult>> = RepositoryResult.Success(emptyList())
 
-        override suspend fun getTrending(type: MediaType?): RepositoryResult<List<Media>> = RepositoryResult.Success(emptyList())
+        override suspend fun getTrending(): RepositoryResult<List<Media>> = RepositoryResult.Success(emptyList())
 
         override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> {
-            return RepositoryResult.Failure(AppError.NotFound())
+            return RepositoryResult.Failure(AppError.NotFound)
         }
 
         override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> {
@@ -42,7 +42,7 @@ class SearchCoordinatorTest {
         }
 
         override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> {
-            return RepositoryResult.Failure(AppError.NotFound())
+            return RepositoryResult.Failure(AppError.NotFound)
         }
 
         override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> {
@@ -54,7 +54,7 @@ class SearchCoordinatorTest {
         }
 
         override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> {
-            return RepositoryResult.Failure(AppError.NotFound())
+            return RepositoryResult.Failure(AppError.NotFound)
         }
 
         override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
@@ -69,8 +69,8 @@ class SearchCoordinatorTest {
             return MutableSharedFlow()
         }
 
-        override suspend fun getSearchHistory(profileId: String): List<String> {
-            return history.filter { it.first == profileId }.map { it.second }
+        override suspend fun getSearchHistory(profileId: String): RepositoryResult<List<String>> {
+            return RepositoryResult.Success(history.filter { it.first == profileId }.map { it.second })
         }
 
         override suspend fun addSearchQuery(query: String, profileId: String) {
