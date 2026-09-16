@@ -21,16 +21,13 @@ import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -40,9 +37,6 @@ import org.junit.Test
 class PlaybackCoordinatorTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val testScope = TestScope(testDispatcher)
-    private val testSupervisorJob = SupervisorJob()
-    private val coordinatorScope = CoroutineScope(testDispatcher + testSupervisorJob)
 
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
@@ -64,23 +58,20 @@ class PlaybackCoordinatorTest {
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
         startPlaybackUseCase = StartPlaybackUseCase(fakeSessionRepository, dispatchers)
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository, dispatchers)
+    }
 
+    @Test
+    fun `play transitions to Ready on successful resolution and playback start`() = runTest(testDispatcher) {
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackUseCase = startPlaybackUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = coordinatorScope
+            scope = this
         )
-    }
 
-    @After
-    fun tearDown() {
-        testSupervisorJob.cancel()
-    }
+        backgroundScope.launch { playbackCoordinator.state.collect {} }
 
-    @Test
-    fun `play transitions to Ready on successful resolution and playback start`() = testScope.runTest {
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -95,7 +86,6 @@ class PlaybackCoordinatorTest {
         )
 
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
-        fakeSessionRepository.startSessionResult = RepositoryResult.Success(Unit)
 
         playbackCoordinator.play(request, profileId = "profile_123")
         advanceUntilIdle()
@@ -107,7 +97,17 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun `play transitions to Error when resolvePlaybackUseCase fails`() = testScope.runTest {
+    fun `play transitions to Error when resolvePlaybackUseCase fails`() = runTest(testDispatcher) {
+        playbackCoordinator = PlaybackCoordinator(
+            resolvePlaybackUseCase = resolvePlaybackUseCase,
+            startPlaybackUseCase = startPlaybackUseCase,
+            recordPlaybackUseCase = recordPlaybackUseCase,
+            dispatchers = dispatchers,
+            scope = this
+        )
+
+        backgroundScope.launch { playbackCoordinator.state.collect {} }
+
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -125,7 +125,15 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
-    fun `stop resets state to Idle and cancels active jobs`() = testScope.runTest {
+    fun `stop resets state to Idle and cancels active jobs`() = runTest(testDispatcher) {
+        playbackCoordinator = PlaybackCoordinator(
+            resolvePlaybackUseCase = resolvePlaybackUseCase,
+            startPlaybackUseCase = startPlaybackUseCase,
+            recordPlaybackUseCase = recordPlaybackUseCase,
+            dispatchers = dispatchers,
+            scope = this
+        )
+
         playbackCoordinator.stop()
 
         assertEquals(PlaybackState.Idle, playbackCoordinator.state.value)
@@ -164,16 +172,10 @@ private class FakeMediaRepository : MediaRepository {
 }
 
 private class FakeSessionRepository : SessionRepository {
-    var startSessionResult: RepositoryResult<Unit> = RepositoryResult.Success(Unit)
-
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
     override fun getCurrentSession(): SessionState? = null
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {
-        if (startSessionResult is RepositoryResult.Failure) {
-            throw IllegalStateException("Failed to start session")
-        }
-    }
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() {}
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
