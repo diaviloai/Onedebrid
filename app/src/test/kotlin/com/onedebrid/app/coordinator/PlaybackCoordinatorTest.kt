@@ -95,12 +95,13 @@ class PlaybackCoordinatorTest {
         )
 
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
+        fakeSessionRepository.startSessionResult = RepositoryResult.Success(Unit)
 
         playbackCoordinator.play(request, profileId = "profile_123")
         advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue(state is PlaybackState.Ready)
+        assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
     }
@@ -118,7 +119,7 @@ class PlaybackCoordinatorTest {
         advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue(state is PlaybackState.Error)
+        assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
     }
@@ -163,10 +164,16 @@ private class FakeMediaRepository : MediaRepository {
 }
 
 private class FakeSessionRepository : SessionRepository {
+    var startSessionResult: RepositoryResult<Unit> = RepositoryResult.Success(Unit)
+
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
     override fun getCurrentSession(): SessionState? = null
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {
+        if (startSessionResult is RepositoryResult.Failure) {
+            throw IllegalStateException("Failed to start session")
+        }
+    }
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() {}
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
