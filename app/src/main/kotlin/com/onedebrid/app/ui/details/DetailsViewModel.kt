@@ -3,190 +3,89 @@ package com.onedebrid.app.ui.details
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.onedebrid.app.data.repository.MediaRepository
 import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
+import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.StreamCandidate
-import com.onedebrid.app.ui.navigation.PlayerNavArgs
-import com.onedebrid.app.usecase.GetEpisodesUseCase
-import com.onedebrid.app.usecase.GetMediaByIdUseCase
-import com.onedebrid.app.usecase.GetStreamCandidatesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class DetailsUiState(
-    val media: Media? = null,
-    val isLoadingMedia: Boolean = true,
-    val mediaError: AppError? = null,
-    val episodes: List<Episode> = emptyList(),
-    val isLoadingEpisodes: Boolean = false,
-    val episodesError: AppError? = null,
-    val picker: PickerUiState = PickerUiState.Closed
-)
-
-sealed interface PickerUiState {
-    data object Closed : PickerUiState
-    data class Loading(val episode: Episode?) : PickerUiState
-    data class Loaded(val episode: Episode?, val candidates: List<StreamCandidate>) : PickerUiState
-    data class Error(val episode: Episode?, val error: AppError) : PickerUiState
+sealed interface DetailsUiState {
+    object Loading : DetailsUiState
+    data class Success(
+        val media: Media,
+        val streams: List<StreamCandidate> = emptyList(),
+        val isLoadingStreams: Boolean = false
+    ) : DetailsUiState
+    data class Error(val message: String) : DetailsUiState
 }
 
 @HiltViewModel
 class DetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val getMediaByIdUseCase: GetMediaByIdUseCase,
-    private val getEpisodesUseCase: GetEpisodesUseCase,
-    private val getStreamCandidatesUseCase: GetStreamCandidatesUseCase
+    private val mediaRepository: MediaRepository,
+    private val dispatchers: CoroutineDispatchers
 ) : ViewModel() {
 
-    private val mediaId: String = checkNotNull(savedStateHandle["mediaId"]) {
-        "DetailsScreen requires a mediaId nav argument"
-    }
-
+    val mediaType: MediaType = MediaType.valueOf(
+        savedStateHandle.get<String>("mediaType")?.uppercase() ?: "MOVIE"
+    )
+    val mediaId: String = savedStateHandle.get<String>("mediaId") ?: ""
     val initialResumePositionMs: Long? = savedStateHandle.get<Long>("resumePositionMs")?.takeIf { it > 0L }
 
-    private val _uiState = MutableStateFlow(DetailsUiState())
+    private val _uiState = MutableStateFlow<DetailsUiState>(DetailsUiState.Loading)
     val uiState: StateFlow<DetailsUiState> = _uiState.asStateFlow()
 
-    private val _navigateToPlayer = Channel<PlayerNavArgs>(Channel.BUFFERED)
-    val navigateToPlayer: Flow<PlayerNavArgs> = _navigateToPlayer.receiveAsFlow()
-
     init {
-        loadMedia()
+        loadMediaDetails()
     }
 
-    private fun loadMedia() {
-        viewModelScope.launch {
-            when (val result = getMediaByIdUseCase(mediaId)) {
+    fun loadMediaDetails() {
+        viewModelScope.launch(dispatchers.io) {
+            _uiState.value = DetailsUiState.Loading
+            when (val result = mediaRepository.getMediaDetails(mediaId, mediaType)) {
                 is RepositoryResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        media = result.data,
-                        isLoadingMedia = false
+                    val media = result.data
+                    _uiState.value = DetailsUiState.Success(
+                        media = media,
+                        isLoadingStreams = true
                     )
-                    if (result.data.type == MediaType.TV_SHOW) {
-                        loadEpisodes()
+                    loadStreams(media)
+                }
+                is RepositoryResult.Failure -> {
+                    _uiState.value = DetailsUiState.Error("Failed to load media details.")
+                }
+            }
+        }
+    }
+
+    private fun loadStreams(media: Media, episodeId: String? = null) {
+        viewModelScope.launch(dispatchers.io) {
+            when (val result = mediaRepository.searchStreamsByMedia(media, episodeId)) {
+                is RepositoryResult.Success -> {
+                    val currentState = _uiState.value
+                    if (currentState is DetailsUiState.Success) {
+                        _uiState.value = currentState.copy(
+                            streams = result.data,
+                            isLoadingStreams = false
+                        )
                     }
                 }
-
                 is RepositoryResult.Failure -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoadingMedia = false,
-                        mediaError = result.error
-                    )
+                    val currentState = _uiState.value
+                    if (currentState is DetailsUiState.Success) {
+                        _uiState.value = currentState.copy(
+                            isLoadingStreams = false
+                        )
+                    }
                 }
             }
         }
-    }
-
-    private fun loadEpisodes() {
-        _uiState.value = _uiState.value.copy(isLoadingEpisodes = true, episodesError = null)
-        viewModelScope.launch {
-            when (val result = getEpisodesUseCase(mediaId)) {
-                is RepositoryResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        episodes = result.data,
-                        isLoadingEpisodes = false
-                    )
-                }
-
-                is RepositoryResult.Failure -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoadingEpisodes = false,
-                        episodesError = result.error
-                    )
-                }
-            }
-        }
-    }
-
-    fun retryMedia() {
-        _uiState.value = _uiState.value.copy(isLoadingMedia = true, mediaError = null)
-        loadMedia()
-    }
-
-    fun retryEpisodes() {
-        loadEpisodes()
-    }
-
-    fun onPlayMovie() {
-        val media = _uiState.value.media ?: return
-        _navigateToPlayer.trySend(
-            PlayerNavArgs(
-                mediaId = media.id,
-                episodeId = null,
-                resumeMs = initialResumePositionMs,
-                preferredSource = null
-            )
-        )
-    }
-
-    fun onPlayEpisode(episode: Episode) {
-        val media = _uiState.value.media ?: return
-        _navigateToPlayer.trySend(
-            PlayerNavArgs(
-                mediaId = media.id,
-                episodeId = episode.id,
-                resumeMs = initialResumePositionMs,
-                preferredSource = null
-            )
-        )
-    }
-
-    fun onChooseStream(episode: Episode? = null) {
-        val media = _uiState.value.media ?: return
-        _uiState.value = _uiState.value.copy(picker = PickerUiState.Loading(episode))
-        viewModelScope.launch {
-            when (val result = getStreamCandidatesUseCase(media, episode)) {
-                is RepositoryResult.Success -> {
-                    _uiState.value = _uiState.value.copy(
-                        picker = PickerUiState.Loaded(episode, result.data)
-                    )
-                }
-
-                is RepositoryResult.Failure -> {
-                    _uiState.value = _uiState.value.copy(
-                        picker = PickerUiState.Error(episode, result.error)
-                    )
-                }
-            }
-        }
-    }
-
-    fun retryChooseStream() {
-        val currentPicker = _uiState.value.picker
-        val episode = when (currentPicker) {
-            is PickerUiState.Error -> currentPicker.episode
-            is PickerUiState.Loading -> currentPicker.episode
-            is PickerUiState.Loaded -> currentPicker.episode
-            PickerUiState.Closed -> null
-        }
-        onChooseStream(episode)
-    }
-
-    fun onDismissPicker() {
-        _uiState.value = _uiState.value.copy(picker = PickerUiState.Closed)
-    }
-
-    fun onCandidateSelected(candidate: StreamCandidate) {
-        val media = _uiState.value.media ?: return
-        val loadedPicker = _uiState.value.picker as? PickerUiState.Loaded ?: return
-        _uiState.value = _uiState.value.copy(picker = PickerUiState.Closed)
-        _navigateToPlayer.trySend(
-            PlayerNavArgs(
-                mediaId = media.id,
-                episodeId = loadedPicker.episode?.id,
-                resumeMs = initialResumePositionMs,
-                preferredSource = candidate
-            )
-        )
     }
 }

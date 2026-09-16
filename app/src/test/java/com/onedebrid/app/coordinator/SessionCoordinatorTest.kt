@@ -1,8 +1,13 @@
 package com.onedebrid.app.coordinator
 
 import com.onedebrid.app.data.repository.ProfileRepository
+import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SessionRepository
 import com.onedebrid.app.di.CoroutineDispatchers
+import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.domain.model.PlaybackRequest
+import com.onedebrid.app.domain.model.SessionState
+import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,19 +25,33 @@ import org.junit.Test
 class SessionCoordinatorTest {
 
     private class FakeProfileRepository : ProfileRepository {
-        val activeProfileFlow = MutableSharedFlow<UserProfile?>()
+        val activeProfileFlow = MutableSharedFlow<UserProfile>()
 
-        override fun observeActiveProfile(): Flow<UserProfile?> {
-            return activeProfileFlow
-        }
+        override fun observeProfiles(): Flow<List<UserProfile>> = MutableSharedFlow()
+        override fun observeActiveProfile(): Flow<UserProfile> = activeProfileFlow
+        override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound)
+        override suspend fun getActiveProfile(): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound)
+        override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
+        override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
+        override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
+        override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
     }
 
     private class FakeSessionRepository : SessionRepository {
         val initialisedProfiles = mutableListOf<UserProfile>()
 
-        override suspend fun initialise(profile: UserProfile) {
+        override fun initialise(profile: UserProfile) {
             initialisedProfiles.add(profile)
         }
+
+        override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
+        override fun getCurrentSession(): SessionState? = null
+        override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+        override suspend fun updatePlaybackPosition(positionMs: Long) {}
+        override suspend fun endPlaybackSession() {}
+        override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
+        override suspend fun clearSearchSession() {}
+        override suspend fun clearSession() {}
     }
 
     private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
@@ -73,15 +92,5 @@ class SessionCoordinatorTest {
 
         assertEquals(1, fakeSessionRepository.initialisedProfiles.size)
         assertEquals(profile, fakeSessionRepository.initialisedProfiles.first())
-    }
-
-    @Test
-    fun `start ignores null active profile emissions`() = testScope.runTest {
-        coordinator.start()
-
-        fakeProfileRepository.activeProfileFlow.emit(null)
-        advanceUntilIdle()
-
-        assertEquals(0, fakeSessionRepository.initialisedProfiles.size)
     }
 }

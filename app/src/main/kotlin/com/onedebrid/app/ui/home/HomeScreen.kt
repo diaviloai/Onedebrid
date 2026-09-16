@@ -6,36 +6,40 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.onedebrid.app.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.onedebrid.app.domain.model.ContinueWatchingItem
+import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
-import com.onedebrid.app.domain.model.StreamCandidate
-import com.onedebrid.app.domain.model.WatchedItem
-import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,134 +47,185 @@ fun HomeScreen(
     onNavigateToDetails: (MediaType, String, Long?) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onNavigateToPlayer: (MediaType, String, String?, StreamCandidate?) -> Unit,
-    modifier: Modifier = Modifier,
+    onNavigateToPlayer: (MediaType, String, String?, String) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(viewModel) {
-        viewModel.navigateToPlayer.collectLatest { navArgs ->
-            onNavigateToPlayer(
-                MediaType.MOVIE,
-                navArgs.mediaId,
-                navArgs.episodeId,
-                navArgs.preferredSource
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("OneDebrid") },
+                actions = {
+                    IconButton(onClick = onNavigateToSearch) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search"
+                        )
+                    }
+                    IconButton(onClick = onNavigateToSettings) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings"
+                        )
+                    }
+                }
             )
         }
-    }
-
-    Column(modifier = modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(stringResource(R.string.app_name)) },
-            actions = {
-                TextButton(onClick = onNavigateToSettings) {
-                    Text(stringResource(R.string.settings_title))
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (val state = uiState) {
+                is HomeUiState.Loading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
-                Button(onClick = onNavigateToSearch) {
-                    Text(stringResource(R.string.home_search_placeholder))
-                }
-            }
-        )
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            when {
-                uiState.isLoading -> LoadingContent()
-                uiState.continueWatching.isEmpty() -> EmptyContent()
-                else -> ContinueWatchingList(
-                    items = uiState.continueWatching,
-                    onItemClick = { item ->
-                        onNavigateToDetails(MediaType.MOVIE, item.mediaId, item.positionMs)
-                    },
-                    onRemove = viewModel::removeItem
-                )
+                is HomeUiState.Error -> {
+                    Text(
+                        text = state.message,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+
+                is HomeUiState.Success -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        contentPadding = PaddingValues(vertical = 16.dp)
+                    ) {
+                        if (state.continueWatching.isNotEmpty()) {
+                            item {
+                                ContinueWatchingSection(
+                                    items = state.continueWatching,
+                                    onItemClick = { item ->
+                                        onNavigateToDetails(
+                                            item.mediaType,
+                                            item.mediaId,
+                                            item.lastPlaybackPositionMs
+                                        )
+                                    }
+                                )
+                            }
+                        }
+
+                        if (state.trending.isNotEmpty()) {
+                            item {
+                                TrendingSection(
+                                    items = state.trending,
+                                    onItemClick = { item ->
+                                        onNavigateToDetails(
+                                            item.type,
+                                            item.id,
+                                            null
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LoadingContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun EmptyContent() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = stringResource(R.string.details_no_streams),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun ContinueWatchingList(
-    items: List<WatchedItem>,
-    onItemClick: (WatchedItem) -> Unit,
-    onRemove: (String) -> Unit
+private fun ContinueWatchingSection(
+    items: List<ContinueWatchingItem>,
+    onItemClick: (ContinueWatchingItem) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
-            text = stringResource(R.string.home_continue_watching),
-            style = MaterialTheme.typography.titleSmall,
+            text = "Continue Watching",
+            style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
-        LazyColumn(contentPadding = PaddingValues(vertical = 8.dp)) {
-            items(items, key = { it.mediaId }) { item ->
-                ContinueWatchingRow(
-                    item = item,
-                    onClick = { onItemClick(item) },
-                    onRemove = onRemove
-                )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(items) { item ->
+                Card(
+                    modifier = Modifier
+                        .width(160.dp)
+                        .clickable { onItemClick(item) }
+                ) {
+                    Column {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                        )
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Text(
+                                text = item.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "${(item.progress * 100).toInt()}% completed",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ContinueWatchingRow(
-    item: WatchedItem,
-    onClick: () -> Unit,
-    onRemove: (String) -> Unit
+private fun TrendingSection(
+    items: List<Media>,
+    onItemClick: (Media) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.mediaId,
-                style = MaterialTheme.typography.bodyLarge
-            )
-            val progressPercent = continueWatchingProgressPercent(item)
-            if (progressPercent != null) {
-                Text(
-                    text = "$progressPercent%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Trending",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(items) { item ->
+                Card(
+                    modifier = Modifier
+                        .width(120.dp)
+                        .clickable { onItemClick(item) }
+                ) {
+                    Column {
+                        AsyncImage(
+                            model = item.posterUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(2f / 3f)
+                        )
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                }
             }
         }
-        IconButton(onClick = { onRemove(item.mediaId) }) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = null
-            )
-        }
     }
-}
-
-private fun continueWatchingProgressPercent(item: WatchedItem): Int? {
-    val position = item.positionMs ?: return null
-    val duration = item.durationMs ?: return null
-    if (duration <= 0L) return null
-    return ((position.toDouble() / duration.toDouble()) * 100).toInt().coerceIn(0, 100)
 }
