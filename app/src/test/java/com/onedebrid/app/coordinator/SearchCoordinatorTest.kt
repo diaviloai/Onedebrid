@@ -5,13 +5,17 @@ import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SearchRepository
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.SearchResult
 import com.onedebrid.app.domain.model.StreamCandidate
+import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.usecase.SearchMediaUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -27,33 +31,58 @@ class SearchCoordinatorTest {
     private class FakeMediaRepository : MediaRepository {
         var searchResult: RepositoryResult<List<SearchResult>> = RepositoryResult.Success(emptyList())
 
-        override suspend fun getTrending(): RepositoryResult<List<Media>> = RepositoryResult.Success(emptyList())
-        override suspend fun getMediaDetails(mediaId: String, mediaType: MediaType): RepositoryResult<Media> {
-            return RepositoryResult.Failure(AppError.NotFound)
+        override suspend fun getTrending(type: MediaType?): RepositoryResult<List<Media>> = RepositoryResult.Success(emptyList())
+
+        override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> {
+            return RepositoryResult.Failure(AppError.NotFound())
         }
+
+        override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> {
+            return RepositoryResult.Success(emptyList())
+        }
+
+        override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> {
+            return RepositoryResult.Failure(AppError.NotFound())
+        }
+
         override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> {
             return searchResult
         }
-        override suspend fun searchStreamsByMedia(media: Media, episodeId: String?): RepositoryResult<List<StreamCandidate>> {
+
+        override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
             return RepositoryResult.Success(emptyList())
+        }
+
+        override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> {
+            return RepositoryResult.Failure(AppError.NotFound())
+        }
+
+        override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
+            return RepositoryResult.Success(emptyMap())
         }
     }
 
     private class FakeSearchRepository : SearchRepository {
         val history = mutableListOf<Pair<String, String>>()
 
-        override suspend fun getSearchHistory(profileId: String): RepositoryResult<List<String>> {
-            return RepositoryResult.Success(history.filter { it.first == profileId }.map { it.second })
+        override fun observeSearchHistory(profileId: String): Flow<List<String>> {
+            return MutableSharedFlow()
         }
 
-        override suspend fun addSearchQuery(profileId: String, query: String): RepositoryResult<Unit> {
+        override suspend fun getSearchHistory(profileId: String): List<String> {
+            return history.filter { it.first == profileId }.map { it.second }
+        }
+
+        override suspend fun addSearchQuery(query: String, profileId: String) {
             history.add(profileId to query)
-            return RepositoryResult.Success(Unit)
         }
 
-        override suspend fun clearSearchHistory(profileId: String): RepositoryResult<Unit> {
+        override suspend fun removeSearchQuery(query: String, profileId: String) {
+            history.removeAll { it.first == profileId && it.second == query }
+        }
+
+        override suspend fun clearSearchHistory(profileId: String) {
             history.removeAll { it.first == profileId }
-            return RepositoryResult.Success(Unit)
         }
     }
 

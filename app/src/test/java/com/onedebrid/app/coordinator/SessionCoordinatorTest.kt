@@ -29,8 +29,8 @@ class SessionCoordinatorTest {
 
         override fun observeProfiles(): Flow<List<UserProfile>> = MutableSharedFlow()
         override fun observeActiveProfile(): Flow<UserProfile> = activeProfileFlow
-        override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound)
-        override suspend fun getActiveProfile(): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound)
+        override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound())
+        override suspend fun getActiveProfile(): RepositoryResult<UserProfile> = RepositoryResult.Failure(AppError.NotFound())
         override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
         override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
         override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
