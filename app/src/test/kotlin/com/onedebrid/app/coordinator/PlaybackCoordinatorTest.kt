@@ -110,7 +110,7 @@ class PlaybackCoordinatorTest {
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
-        val expectedError = AppError.StreamResolutionFailed("Failed to resolve stream")
+        val expectedError = AppError.NoCachedStreamAvailable
 
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
 
