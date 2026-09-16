@@ -1,9 +1,9 @@
 package com.onedebrid.app.coordinator
 
+import com.onedebrid.app.ui.navigation.PlayerNavArgs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -26,7 +26,7 @@ class NavigationCoordinatorTest {
 
     @Before
     fun setup() {
-        navigationCoordinator = NavigationCoordinator(scope = coordinatorScope)
+        navigationCoordinator = NavigationCoordinator()
     }
 
     @After
@@ -35,21 +35,27 @@ class NavigationCoordinatorTest {
     }
 
     @Test
-    fun `navigateTo emits target destination`() = testScope.runTest {
-        val emittedEvents = mutableListOf<NavigationTarget>()
-        
+    fun `navigateToPlayer emits expected PlayerNavArgs`() = testScope.runTest {
+        val emittedArgs = mutableListOf<PlayerNavArgs>()
+
         val job = coordinatorScope.launch {
-            navigationCoordinator.navigationEvents.collect {
-                emittedEvents.add(it)
+            navigationCoordinator.navigateToPlayer.collect { args ->
+                emittedArgs.add(args)
             }
         }
 
-        val destination = NavigationTarget.Details(mediaId = "media_123")
-        navigationCoordinator.navigateTo(destination)
+        val expectedArgs = PlayerNavArgs(
+            mediaId = "media_123",
+            episodeId = "ep_456",
+            resumeMs = 5000L,
+            preferredSource = null
+        )
+
+        navigationCoordinator.navigateToPlayer(expectedArgs)
         advanceUntilIdle()
 
-        assertEquals(1, emittedEvents.size)
-        assertEquals(destination, emittedEvents.first())
+        assertEquals(1, emittedArgs.size)
+        assertEquals(expectedArgs, emittedArgs.first())
 
         job.cancel()
     }

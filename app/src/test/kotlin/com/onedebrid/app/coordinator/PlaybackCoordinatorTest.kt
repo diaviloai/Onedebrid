@@ -7,13 +7,13 @@ import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.StreamSource
+import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -67,9 +67,17 @@ class PlaybackCoordinatorTest {
     @Test
     fun `play transitions to Ready on successful resolution and playback start`() = testScope.runTest {
         val request = PlaybackRequest(
-            media = Media("1", "tt123", "Test Movie", MediaType.MOVIE)
+            media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
-        val streamSource = StreamSource("https://stream.url", "video.mkv", 1024L, true)
+        val streamSource = StreamSource(
+            id = "s1",
+            mediaId = "1",
+            url = "https://stream.url",
+            quality = VideoQuality.HD_1080,
+            fileSizeBytes = 1024L,
+            fileName = "video.mkv",
+            isCached = true
+        )
 
         fakeResolvePlaybackUseCase.result = RepositoryResult.Success(streamSource)
         fakeStartPlaybackUseCase.result = RepositoryResult.Success(Unit)
@@ -86,9 +94,9 @@ class PlaybackCoordinatorTest {
     @Test
     fun `play transitions to Error when resolvePlaybackUseCase fails`() = testScope.runTest {
         val request = PlaybackRequest(
-            media = Media("1", "tt123", "Test Movie", MediaType.MOVIE)
+            media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
-        val expectedError = AppError.StreamResolutionFailed("Failed to resolve stream")
+        val expectedError = AppError.StreamResolutionFailed
 
         fakeResolvePlaybackUseCase.result = RepositoryResult.Failure(expectedError)
 
@@ -109,15 +117,25 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class FakeResolvePlaybackUseCase : ResolvePlaybackUseCase {
-    var result: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Default error"))
+private class FakeResolvePlaybackUseCase : ResolvePlaybackUseCase(
+    mediaRepository = FakeMediaRepository()
+) {
+    var result: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown)
 
     override suspend fun invoke(request: PlaybackRequest, profileId: String): RepositoryResult<StreamSource> {
         return result
     }
 }
 
-private class FakeStartPlaybackUseCase : StartPlaybackUseCase {
+private class FakeStartPlaybackUseCase : StartPlaybackUseCase(
+    sessionRepository = FakeSessionRepository(),
+    dispatchers = CoroutineDispatchers(
+        main = StandardTestDispatcher(),
+        io = StandardTestDispatcher(),
+        default = StandardTestDispatcher(),
+        unconfined = StandardTestDispatcher()
+    )
+) {
     var result: RepositoryResult<Unit> = RepositoryResult.Success(Unit)
 
     override suspend fun invoke(request: PlaybackRequest, source: StreamSource): RepositoryResult<Unit> {
@@ -125,7 +143,15 @@ private class FakeStartPlaybackUseCase : StartPlaybackUseCase {
     }
 }
 
-private class FakeRecordPlaybackUseCase : RecordPlaybackUseCase {
+private class FakeRecordPlaybackUseCase : RecordPlaybackUseCase(
+    playbackRepository = FakePlaybackRepository(),
+    dispatchers = CoroutineDispatchers(
+        main = StandardTestDispatcher(),
+        io = StandardTestDispatcher(),
+        default = StandardTestDispatcher(),
+        unconfined = StandardTestDispatcher()
+    )
+) {
     val recordedCalls = mutableListOf<Triple<String, String, String?>>()
 
     override suspend fun invoke(profileId: String, mediaId: String, episodeId: String?): RepositoryResult<Unit> {
