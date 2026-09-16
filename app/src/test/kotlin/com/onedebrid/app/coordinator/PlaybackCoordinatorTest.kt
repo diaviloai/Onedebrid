@@ -206,7 +206,7 @@ private class FakePlaybackRepository : PlaybackRepository {
         episodeId: String?
     ): RepositoryResult<Long?> = RepositoryResult.Success(null)
 
-    override suspend fun markAsCompleted(profileId: String, mediaId: String) {}
+    override suspend fun  markAsCompleted(profileId: String, mediaId: String) {}
 
     override fun observeRecentlyPlayed(profileId: String): Flow<List<WatchedItem>> = MutableSharedFlow()
 
