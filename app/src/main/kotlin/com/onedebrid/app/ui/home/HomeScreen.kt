@@ -32,11 +32,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.onedebrid.app.domain.model.ContinueWatchingItem
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
@@ -157,28 +155,18 @@ private fun ContinueWatchingSection(
                         .width(160.dp)
                         .clickable { onItemClick(item) }
                 ) {
-                    Column {
-                        AsyncImage(
-                            model = item.posterUrl,
-                            contentDescription = item.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(16f / 9f)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1
                         )
-                        Column(modifier = Modifier.padding(8.dp)) {
-                            Text(
-                                text = item.title,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${(item.progress * 100).toInt()}% completed",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "${(item.progress * 100).toInt()}% completed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -208,20 +196,11 @@ private fun TrendingSection(
                         .width(120.dp)
                         .clickable { onItemClick(item) }
                 ) {
-                    Column {
-                        AsyncImage(
-                            model = item.posterUrl,
-                            contentDescription = item.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(2f / 3f)
-                        )
+                    Column(modifier = Modifier.padding(12.dp)) {
                         Text(
                             text = item.title,
                             style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            modifier = Modifier.padding(8.dp)
+                            maxLines = 1
                         )
                     }
                 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.onedebrid.app.data.repository.MediaRepository
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.di.CoroutineDispatchers
+import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.StreamCandidate
@@ -49,7 +50,7 @@ class DetailsViewModel @Inject constructor(
     fun loadMediaDetails() {
         viewModelScope.launch(dispatchers.io) {
             _uiState.value = DetailsUiState.Loading
-            when (val result = mediaRepository.getMediaDetails(mediaId, mediaType)) {
+            when (val result = mediaRepository.getMediaDetails(mediaId)) {
                 is RepositoryResult.Success -> {
                     val media = result.data
                     _uiState.value = DetailsUiState.Success(
@@ -65,9 +66,9 @@ class DetailsViewModel @Inject constructor(
         }
     }
 
-    private fun loadStreams(media: Media, episodeId: String? = null) {
+    private fun loadStreams(media: Media, episode: Episode? = null) {
         viewModelScope.launch(dispatchers.io) {
-            when (val result = mediaRepository.searchStreamsByMedia(media, episodeId)) {
+            when (val result = mediaRepository.searchStreamsByMedia(media, episode)) {
                 is RepositoryResult.Success -> {
                     val currentState = _uiState.value
                     if (currentState is DetailsUiState.Success) {
