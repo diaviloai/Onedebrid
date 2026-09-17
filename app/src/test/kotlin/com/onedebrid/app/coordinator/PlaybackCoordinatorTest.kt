@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -86,6 +87,7 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
+        testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
@@ -113,6 +115,7 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
+        testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
