@@ -25,7 +25,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -36,7 +36,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackCoordinatorTest {
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var fakeMediaRepository: FakeMediaRepository
@@ -69,7 +69,7 @@ class PlaybackCoordinatorTest {
             scope = this
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
+        val collectorJob = backgroundScope.launch { playbackCoordinator.state.collect {} }
 
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
@@ -87,12 +87,14 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
+
+        collectorJob.cancel()
     }
 
     @Test
@@ -105,7 +107,7 @@ class PlaybackCoordinatorTest {
             scope = this
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
+        val collectorJob = backgroundScope.launch { playbackCoordinator.state.collect {} }
 
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
@@ -115,12 +117,14 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
+
+        collectorJob.cancel()
     }
 
     @Test
@@ -174,7 +178,8 @@ private class FakeSessionRepository : SessionRepository {
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
     override fun getCurrentSession(): SessionState? = null
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> =
+        RepositoryResult.Success(Unit)
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() {}
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
