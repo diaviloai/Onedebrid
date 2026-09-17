@@ -178,8 +178,7 @@ private class FakeSessionRepository : SessionRepository {
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
     override fun getCurrentSession(): SessionState? = null
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> =
-        RepositoryResult.Success(Unit)
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() {}
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
