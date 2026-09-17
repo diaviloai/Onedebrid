@@ -21,12 +21,17 @@ import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -35,7 +40,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackCoordinatorTest {
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var fakeMediaRepository: FakeMediaRepository
@@ -49,6 +54,7 @@ class PlaybackCoordinatorTest {
 
     @Before
     fun setup() {
+        Dispatchers.setMain(testDispatcher)
         fakeMediaRepository = FakeMediaRepository()
         fakeSessionRepository = FakeSessionRepository()
         fakePlaybackRepository = FakePlaybackRepository()
@@ -56,6 +62,11 @@ class PlaybackCoordinatorTest {
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
         startPlaybackUseCase = StartPlaybackUseCase(fakeSessionRepository, dispatchers)
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository, dispatchers)
+    }
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
     }
 
     @Test
@@ -86,6 +97,7 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
+        runCurrent()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
@@ -113,6 +125,7 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
+        runCurrent()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
