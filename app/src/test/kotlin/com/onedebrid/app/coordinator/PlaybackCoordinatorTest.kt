@@ -177,7 +177,7 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
         val result = mutableMapOf<String, Boolean>()
         candidates.forEach { candidate ->
-            candidate.magnetUrl.let { result[it] = true }
+            candidate.magnetUrl?.let { result[it] = true }
             candidate.title.let { result[it] = true }
         }
         return RepositoryResult.Success(result)
