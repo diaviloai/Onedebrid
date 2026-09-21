@@ -95,7 +95,16 @@ class PlaybackCoordinatorTest {
             fileName = "video.mkv",
             isCached = true
         )
+        val candidate = StreamCandidate(
+            id = "c1",
+            title = "Test Candidate",
+            infoHash = "hash123",
+            fileSizeBytes = 1024L,
+            quality = VideoQuality.HD_1080
+        )
 
+        fakeMediaRepository.searchStreamsResult = RepositoryResult.Success(listOf(candidate))
+        fakeMediaRepository.checkCacheResult = RepositoryResult.Success(mapOf("hash123" to true))
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
@@ -125,7 +134,7 @@ class PlaybackCoordinatorTest {
         )
         val expectedError = AppError.NoCachedStreamAvailable
 
-        fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
+        fakeMediaRepository.searchStreamsResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
         testScheduler.advanceUntilIdle()
@@ -160,6 +169,8 @@ private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : Corout
 }
 
 private class FakeMediaRepository : MediaRepository {
+    var searchStreamsResult: RepositoryResult<List<StreamCandidate>> = RepositoryResult.Success(emptyList())
+    var checkCacheResult: RepositoryResult<Map<String, Boolean>> = RepositoryResult.Success(emptyMap())
     var resolveStreamResult: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Default error"))
 
     override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
@@ -175,13 +186,13 @@ private class FakeMediaRepository : MediaRepository {
         resolveStreamResult
 
     override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
+        checkCacheResult
 
     override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> =
         RepositoryResult.Failure(AppError.Unknown("Not implemented"))
 
     override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
+        searchStreamsResult
 }
 
 private class FakeSessionRepository : SessionRepository {
