@@ -178,15 +178,8 @@ private class FakeMediaRepository : MediaRepository {
         val result = mutableMapOf<String, Boolean>()
         candidates.forEach { candidate ->
             candidate.magnetUrl?.let { result[it] = true }
+            candidate.hash?.let { result[it] = true }
             candidate.title.let { result[it] = true }
-            // Map every non-null property to ensure cache lookup succeeds regardless of identifier field used
-            StreamCandidate::class.java.declaredFields.forEach { field ->
-                field.isAccessible = true
-                val value = field.get(candidate)
-                if (value is String) {
-                    result[value] = true
-                }
-            }
         }
         return RepositoryResult.Success(result)
     }
@@ -197,7 +190,16 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
         searchStreamsResult?.let { return it }
         return if (resolveStreamResult is RepositoryResult.Success) {
-            RepositoryResult.Success(listOf(StreamCandidate(title = "Mock Stream", magnetUrl = "magnet:?xt=urn:btih:mock", quality = VideoQuality.HD_1080)))
+            RepositoryResult.Success(
+                listOf(
+                    StreamCandidate(
+                        title = "Mock Stream",
+                        hash = "mock_hash_123",
+                        magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
+                        quality = VideoQuality.HD_1080
+                    )
+                )
+            )
         } else {
             RepositoryResult.Success(emptyList())
         }
