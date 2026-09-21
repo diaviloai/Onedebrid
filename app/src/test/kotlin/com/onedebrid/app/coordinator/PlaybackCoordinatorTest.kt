@@ -160,7 +160,7 @@ private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : Corout
 }
 
 private class FakeMediaRepository : MediaRepository {
-    var searchStreamsResult: RepositoryResult<List<StreamCandidate>> = RepositoryResult.Success(emptyList())
+    var searchStreamsResult: RepositoryResult<List<StreamCandidate>>? = null
     var checkCacheResult: RepositoryResult<Map<String, Boolean>> = RepositoryResult.Success(emptyMap())
     var resolveStreamResult: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Default error"))
 
@@ -182,8 +182,15 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> =
         RepositoryResult.Failure(AppError.Unknown("Not implemented"))
 
-    override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> =
-        searchStreamsResult
+    override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
+        searchStreamsResult?.let { return it }
+        // Default to returning a list with a mock candidate if resolveStreamResult is successful
+        return if (resolveStreamResult is RepositoryResult.Success) {
+            RepositoryResult.Success(listOf(StreamCandidate(title = "Mock Stream", magnetUrl = "magnet:?xt=urn:btih:mock", quality = VideoQuality.HD_1080)))
+        } else {
+            RepositoryResult.Success(emptyList())
+        }
+    }
 }
 
 private class FakeSessionRepository : SessionRepository {
