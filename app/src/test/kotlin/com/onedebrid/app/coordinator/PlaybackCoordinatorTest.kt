@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -153,18 +152,10 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatcher() {
-    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
-        dispatcher.dispatch(context, block)
-    }
-
-    companion object {
-        operator fun invoke(dispatcher: CoroutineDispatcher) = object : CoroutineDispatchers {
-            override val main: CoroutineDispatcher = dispatcher
-            override val io: CoroutineDispatcher = dispatcher
-            override val default: CoroutineDispatcher = dispatcher
-        }
-    }
+private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
+    override val main: CoroutineDispatcher = dispatcher
+    override val io: CoroutineDispatcher = dispatcher
+    override val default: CoroutineDispatcher = dispatcher
 }
 
 private class FakeMediaRepository : MediaRepository {
@@ -186,8 +177,8 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
         val result = mutableMapOf<String, Boolean>()
         candidates.forEach { candidate ->
-            result[candidate.magnetUrl] = true
-            result[candidate.title] = true
+            candidate.magnetUrl.let { result[it] = true }
+            candidate.title.let { result[it] = true }
         }
         return RepositoryResult.Success(result)
     }
