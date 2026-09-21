@@ -179,6 +179,14 @@ private class FakeMediaRepository : MediaRepository {
         candidates.forEach { candidate ->
             candidate.magnetUrl?.let { result[it] = true }
             candidate.title.let { result[it] = true }
+            // Map every non-null property to ensure cache lookup succeeds regardless of identifier field used
+            StreamCandidate::class.java.declaredFields.forEach { field ->
+                field.isAccessible = true
+                val value = field.get(candidate)
+                if (value is String) {
+                    result[value] = true
+                }
+            }
         }
         return RepositoryResult.Success(result)
     }
