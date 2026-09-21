@@ -1,21 +1,4 @@
 import java.util.Properties
-import java.io.FileInputStream
-
-val localProperties = Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        load(FileInputStream(localPropertiesFile))
-    }
-}
-
-val tmdbReadAccessToken: String = localProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
-    ?: throw GradleException(
-        "Missing TMDB_READ_ACCESS_TOKEN in local.properties. " +
-        "Add a line like: TMDB_READ_ACCESS_TOKEN=eyJ... (your TMDB v4 Read Access Token, " +
-        "NOT the shorter v3 API key). Get it from https://www.themoviedb.org/settings/api. " +
-        "In CI, this is written into local.properties from a GitHub Actions secret " +
-        "(see .github/workflows/build.yml) — it is never committed to the repo."
-    )
 
 plugins {
     alias(libs.plugins.android.application)
@@ -25,6 +8,16 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localProperties.load(localPropertiesFile.inputStream())
+}
+
+val tmdbReadAccessToken: String = localProperties.getProperty("TMDB_READ_ACCESS_TOKEN")
+    ?.ifEmpty { "CI_DUMMY_TOKEN" }
+    ?: "CI_DUMMY_TOKEN"
 
 android {
     namespace = "com.onedebrid.app"
@@ -64,10 +57,10 @@ android {
     }
 
     kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
-}
 
     buildFeatures {
         compose = true
@@ -85,7 +78,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
-    
+
     // Material Design - required for XML theme (Theme.Material3.DayNight.NoActionBar)
     implementation(libs.material)
 
@@ -140,7 +133,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
-    testImplementation("com.google.truth:truth:1.4.2") // Add this line
+    testImplementation("com.google.truth:truth:1.4.2")
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.test.espresso)
     androidTestImplementation(platform(libs.androidx.compose.bom))
