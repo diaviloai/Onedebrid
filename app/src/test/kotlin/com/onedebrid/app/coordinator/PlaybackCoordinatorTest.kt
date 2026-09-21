@@ -21,6 +21,7 @@ import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -71,12 +72,13 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `play transitions to Ready on successful resolution and playback start`() = runTest(testDispatcher) {
+        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackUseCase = startPlaybackUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = this
+            scope = coordinatorScope
         )
 
         backgroundScope.launch { playbackCoordinator.state.collect {} }
@@ -107,12 +109,13 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `play transitions to Error when resolvePlaybackUseCase fails`() = runTest(testDispatcher) {
+        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackUseCase = startPlaybackUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = this
+            scope = coordinatorScope
         )
 
         backgroundScope.launch { playbackCoordinator.state.collect {} }
@@ -135,12 +138,13 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `stop resets state to Idle and cancels active jobs`() = runTest(testDispatcher) {
+        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackUseCase = startPlaybackUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = this
+            scope = coordinatorScope
         )
 
         playbackCoordinator.stop()
