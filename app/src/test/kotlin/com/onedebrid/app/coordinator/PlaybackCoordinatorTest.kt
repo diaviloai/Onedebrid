@@ -95,16 +95,7 @@ class PlaybackCoordinatorTest {
             fileName = "video.mkv",
             isCached = true
         )
-        val candidate = StreamCandidate(
-            id = "c1",
-            title = "Test Candidate",
-            infoHash = "hash123",
-            fileSizeBytes = 1024L,
-            quality = VideoQuality.HD_1080
-        )
 
-        fakeMediaRepository.searchStreamsResult = RepositoryResult.Success(listOf(candidate))
-        fakeMediaRepository.checkCacheResult = RepositoryResult.Success(mapOf("hash123" to true))
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
