@@ -25,12 +25,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -79,8 +80,6 @@ class PlaybackCoordinatorTest {
             scope = this
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
-
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -97,9 +96,11 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        runCurrent()
 
-        val state = playbackCoordinator.state.value
+        val state = withTimeout(2000) {
+            playbackCoordinator.state.first { it is PlaybackState.Ready }
+        }
+
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
@@ -115,8 +116,6 @@ class PlaybackCoordinatorTest {
             scope = this
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
-
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -125,9 +124,11 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        runCurrent()
 
-        val state = playbackCoordinator.state.value
+        val state = withTimeout(2000) {
+            playbackCoordinator.state.first { it is PlaybackState.Error }
+        }
+
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
