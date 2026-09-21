@@ -153,15 +153,22 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
-    override val main: CoroutineDispatcher = dispatcher
-    override val io: CoroutineDispatcher = dispatcher
-    override val default: CoroutineDispatcher = dispatcher
+private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatcher() {
+    override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+        dispatcher.dispatch(context, block)
+    }
+
+    companion object {
+        operator fun invoke(dispatcher: CoroutineDispatcher) = object : CoroutineDispatchers {
+            override val main: CoroutineDispatcher = dispatcher
+            override val io: CoroutineDispatcher = dispatcher
+            override val default: CoroutineDispatcher = dispatcher
+        }
+    }
 }
 
 private class FakeMediaRepository : MediaRepository {
     var searchStreamsResult: RepositoryResult<List<StreamCandidate>>? = null
-    var checkCacheResult: RepositoryResult<Map<String, Boolean>> = RepositoryResult.Success(emptyMap())
     var resolveStreamResult: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Default error"))
 
     override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
@@ -176,15 +183,20 @@ private class FakeMediaRepository : MediaRepository {
     override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
         resolveStreamResult
 
-    override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> =
-        checkCacheResult
+    override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
+        val result = mutableMapOf<String, Boolean>()
+        candidates.forEach { candidate ->
+            result[candidate.magnetUrl] = true
+            result[candidate.title] = true
+        }
+        return RepositoryResult.Success(result)
+    }
 
     override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> =
         RepositoryResult.Failure(AppError.Unknown("Not implemented"))
 
     override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
         searchStreamsResult?.let { return it }
-        // Default to returning a list with a mock candidate if resolveStreamResult is successful
         return if (resolveStreamResult is RepositoryResult.Success) {
             RepositoryResult.Success(listOf(StreamCandidate(title = "Mock Stream", magnetUrl = "magnet:?xt=urn:btih:mock", quality = VideoQuality.HD_1080)))
         } else {
