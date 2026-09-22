@@ -3,12 +3,14 @@ package com.onedebrid.app.ui.home
 import com.onedebrid.app.data.repository.PlaybackRepository
 import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
+import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetContinueWatchingUseCase
 import com.onedebrid.app.usecase.RemoveFromContinueWatchingUseCase
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +31,7 @@ import org.junit.Test
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
     private lateinit var continueWatchingFlow: MutableSharedFlow<List<WatchedItem>>
@@ -52,7 +55,8 @@ class HomeViewModelTest {
         homeViewModel = HomeViewModel(
             getActiveProfileUseCase = getActiveProfileUseCase,
             getContinueWatchingUseCase = getContinueWatchingUseCase,
-            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase
+            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase,
+            dispatchers = dispatchers
         )
     }
 
@@ -65,7 +69,15 @@ class HomeViewModelTest {
     fun `observes continue watching list on active profile emission`() = runTest(testDispatcher) {
         val profile = UserProfile(id = "p1", name = "Test Profile")
         val items = listOf(
-            WatchedItem(mediaId = "m1", title = "Test Media", positionMs = 1000L)
+            WatchedItem(
+                mediaId = "m1",
+                episodeId = null,
+                seasonNumber = null,
+                episodeNumber = null,
+                positionMs = 1000L,
+                durationMs = 120000L,
+                lastInteractedAt = 1000000L
+            )
         )
 
         backgroundScope.launch { homeViewModel.uiState.collect {} }
@@ -84,7 +96,15 @@ class HomeViewModelTest {
     @Test
     fun `onItemClick emits navigation args channel event`() = runTest(testDispatcher) {
         val profile = UserProfile(id = "p1", name = "Test Profile")
-        val item = WatchedItem(mediaId = "m1", episodeId = "e1", title = "Test Media", positionMs = 5000L)
+        val item = WatchedItem(
+            mediaId = "m1",
+            episodeId = "e1",
+            seasonNumber = 1,
+            episodeNumber = 1,
+            positionMs = 5000L,
+            durationMs = 120000L,
+            lastInteractedAt = 1000000L
+        )
 
         activeProfileFlow.emit(profile)
         testScheduler.advanceUntilIdle()
@@ -95,6 +115,12 @@ class HomeViewModelTest {
         assertEquals("m1", navArgs.mediaId)
         assertEquals("e1", navArgs.episodeId)
         assertEquals(5000L, navArgs.resumeMs)
+    }
+
+    private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
+        override val main: CoroutineDispatcher = dispatcher
+        override val io: CoroutineDispatcher = dispatcher
+        override val default: CoroutineDispatcher = dispatcher
     }
 
     private class FakeProfileRepository(
