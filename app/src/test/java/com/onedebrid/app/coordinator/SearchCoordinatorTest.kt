@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -131,6 +132,8 @@ class SearchCoordinatorTest {
             scope = coordinatorScope
         )
 
+        backgroundScope.launch { coordinator.state.collect {} }
+
         val query = "Inception"
         val profileId = "profile_1"
         val expectedResults = listOf(
@@ -152,7 +155,7 @@ class SearchCoordinatorTest {
         advanceUntilIdle()
 
         val currentState = coordinator.state.value
-        assertTrue(currentState is SearchState.Results)
+        assertTrue("Expected SearchState.Results but was $currentState", currentState is SearchState.Results)
         assertEquals(expectedResults, (currentState as SearchState.Results).results)
 
         coordinatorScope.cancel()
@@ -169,6 +172,8 @@ class SearchCoordinatorTest {
             scope = coordinatorScope
         )
 
+        backgroundScope.launch { coordinator.state.collect {} }
+
         val query = "Unknown"
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
@@ -179,7 +184,7 @@ class SearchCoordinatorTest {
         advanceUntilIdle()
 
         val currentState = coordinator.state.value
-        assertTrue(currentState is SearchState.Error)
+        assertTrue("Expected SearchState.Error but was $currentState", currentState is SearchState.Error)
         assertEquals(expectedError, (currentState as SearchState.Error).error)
 
         coordinatorScope.cancel()
@@ -195,6 +200,8 @@ class SearchCoordinatorTest {
             dispatchers = dispatchers,
             scope = coordinatorScope
         )
+
+        backgroundScope.launch { coordinator.state.collect {} }
 
         val query = "Inception"
         val profileId = "profile_1"
