@@ -3,14 +3,12 @@ package com.onedebrid.app.ui.home
 import com.onedebrid.app.data.repository.PlaybackRepository
 import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetContinueWatchingUseCase
 import com.onedebrid.app.usecase.RemoveFromContinueWatchingUseCase
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -31,7 +29,6 @@ import org.junit.Test
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
     private lateinit var continueWatchingFlow: MutableSharedFlow<List<WatchedItem>>
@@ -55,8 +52,7 @@ class HomeViewModelTest {
         homeViewModel = HomeViewModel(
             getActiveProfileUseCase = getActiveProfileUseCase,
             getContinueWatchingUseCase = getContinueWatchingUseCase,
-            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase,
-            dispatchers = dispatchers
+            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase
         )
     }
 
@@ -115,12 +111,6 @@ class HomeViewModelTest {
         assertEquals("m1", navArgs.mediaId)
         assertEquals("e1", navArgs.episodeId)
         assertEquals(5000L, navArgs.resumeMs)
-    }
-
-    private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
-        override val main: CoroutineDispatcher = dispatcher
-        override val io: CoroutineDispatcher = dispatcher
-        override val default: CoroutineDispatcher = dispatcher
     }
 
     private class FakeProfileRepository(

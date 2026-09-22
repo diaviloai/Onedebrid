@@ -25,7 +25,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -72,8 +71,7 @@ class SearchViewModelTest {
             searchCoordinator = searchCoordinator,
             getSearchHistoryUseCase = getSearchHistoryUseCase,
             clearSearchHistoryUseCase = clearSearchHistoryUseCase,
-            getActiveProfileUseCase = getActiveProfileUseCase,
-            dispatchers = dispatchers
+            getActiveProfileUseCase = getActiveProfileUseCase
         )
     }
 
