@@ -71,7 +71,8 @@ class SearchViewModelTest {
             searchCoordinator = searchCoordinator,
             getSearchHistoryUseCase = getSearchHistoryUseCase,
             clearSearchHistoryUseCase = clearSearchHistoryUseCase,
-            getActiveProfileUseCase = getActiveProfileUseCase
+            getActiveProfileUseCase = getActiveProfileUseCase,
+            dispatchers = dispatchers
         )
     }
 
@@ -176,8 +177,8 @@ class SearchViewModelTest {
 
         override fun observeSearchHistory(profileId: String): Flow<List<String>> = historyFlow
 
-        override suspend fun addSearchQuery(query: String, profileId: String) {}
-        override suspend fun removeSearchQuery(query: String, profileId: String) {}
+        override suspend fun addSearchQuery(profileId: String, query: String) {}
+        override suspend fun removeSearchQuery(profileId: String, query: String) {}
         override suspend fun clearSearchHistory(profileId: String) {}
     }
 
