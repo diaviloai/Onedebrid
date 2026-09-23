@@ -63,7 +63,7 @@ class SearchViewModelTest {
 
         searchCoordinator = SearchCoordinator(searchMediaUseCase, dispatchers, coordinatorScope)
 
-        val getActiveProfileUseCase = GetActiveProfileUseCase(FakeProfileRepository(activeProfileFlow))
+        val getActiveProfileUseCase = GetActiveProfileUseCase(FakeProfileRepository(activeProfileFlow), dispatchers)
         val getSearchHistoryUseCase = GetSearchHistoryUseCase(fakeSearchRepository)
         val clearSearchHistoryUseCase = ClearSearchHistoryUseCase(fakeSearchRepository)
 

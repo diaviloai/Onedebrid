@@ -48,7 +48,7 @@ class HomeViewModelTest {
         fakePlaybackRepository = FakePlaybackRepository(continueWatchingFlow)
 
         val profileRepository = FakeProfileRepository(activeProfileFlow)
-        val getActiveProfileUseCase = GetActiveProfileUseCase(profileRepository)
+        val getActiveProfileUseCase = GetActiveProfileUseCase(profileRepository, dispatchers)
         val getContinueWatchingUseCase = GetContinueWatchingUseCase(fakePlaybackRepository)
         val removeFromContinueWatchingUseCase = RemoveFromContinueWatchingUseCase(fakePlaybackRepository)
 
