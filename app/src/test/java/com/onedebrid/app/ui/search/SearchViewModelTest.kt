@@ -44,7 +44,6 @@ class SearchViewModelTest {
     private lateinit var fakeMediaRepository: FakeMediaRepository
     private lateinit var fakeSearchRepository: FakeSearchRepository
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
-    private lateinit var searchHistoryFlow: MutableSharedFlow<List<String>>
 
     private lateinit var searchCoordinator: SearchCoordinator
     private lateinit var searchViewModel: SearchViewModel
@@ -56,7 +55,6 @@ class SearchViewModelTest {
         fakeMediaRepository = FakeMediaRepository()
         fakeSearchRepository = FakeSearchRepository()
         activeProfileFlow = MutableSharedFlow()
-        searchHistoryFlow = MutableSharedFlow()
 
         val searchMediaUseCase = SearchMediaUseCase(fakeMediaRepository, fakeSearchRepository, dispatchers)
         val coordinatorScope = CoroutineScope(testDispatcher + SupervisorJob())
