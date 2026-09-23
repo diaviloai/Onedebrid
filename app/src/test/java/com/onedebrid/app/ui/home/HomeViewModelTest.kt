@@ -55,8 +55,7 @@ class HomeViewModelTest {
         homeViewModel = HomeViewModel(
             getActiveProfileUseCase = getActiveProfileUseCase,
             getContinueWatchingUseCase = getContinueWatchingUseCase,
-            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase,
-            dispatchers = dispatchers
+            removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase
         )
     }
 
