@@ -198,3 +198,4 @@ class SearchViewModelTest {
             RepositoryResult.Success(Unit)
     }
 }
+ 
