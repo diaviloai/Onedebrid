@@ -28,7 +28,7 @@ import javax.inject.Singleton
 class SearchCoordinator @Inject constructor(
     private val searchMediaUseCase: SearchMediaUseCase,
     private val dispatchers: CoroutineDispatchers,
-    @ApplicationScope private val scope: CoroutineScope
+    @param:ApplicationScope private val scope: CoroutineScope
 ) {
 
     private val _state = MutableStateFlow<SearchState>(SearchState.Idle)

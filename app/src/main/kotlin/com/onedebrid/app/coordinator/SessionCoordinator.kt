@@ -26,7 +26,7 @@ class SessionCoordinator @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val sessionRepository: SessionRepository,
     private val dispatchers: CoroutineDispatchers,
-    @ApplicationScope private val scope: CoroutineScope
+    @param:ApplicationScope private val scope: CoroutineScope
 ) {
 
     /**

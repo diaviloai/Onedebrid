@@ -33,7 +33,7 @@ class PlaybackCoordinator @Inject constructor(
     private val startPlaybackUseCase: StartPlaybackUseCase,
     private val recordPlaybackUseCase: RecordPlaybackUseCase,
     private val dispatchers: CoroutineDispatchers,
-    @ApplicationScope private val scope: CoroutineScope
+    @param:ApplicationScope private val scope: CoroutineScope
 ) {
 
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)

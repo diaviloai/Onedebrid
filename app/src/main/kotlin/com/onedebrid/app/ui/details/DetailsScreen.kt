@@ -122,12 +122,10 @@ fun DetailsScreen(
                                                 text = candidate.title,
                                                 style = MaterialTheme.typography.bodyLarge
                                             )
-                                            candidate.quality?.let { quality ->
-                                                Text(
-                                                    text = quality.name,
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
+                                            Text(
+                                                text = candidate.quality.name,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Button(
                                                 onClick = {
