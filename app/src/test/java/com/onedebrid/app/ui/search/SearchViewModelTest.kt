@@ -63,7 +63,11 @@ class SearchViewModelTest {
         )
         val coordinatorScope = CoroutineScope(testDispatcher + SupervisorJob())
 
-        searchCoordinator = SearchCoordinator(searchMediaUseCase, dispatchers, coordinatorScope)
+        searchCoordinator = SearchCoordinator(
+            searchMediaUseCase = searchMediaUseCase,
+            dispatchers = dispatchers,
+            scope = coordinatorScope
+        )
 
         val getActiveProfileUseCase = GetActiveProfileUseCase(FakeProfileRepository(activeProfileFlow))
         val getSearchHistoryUseCase = GetSearchHistoryUseCase(fakeSearchRepository)
