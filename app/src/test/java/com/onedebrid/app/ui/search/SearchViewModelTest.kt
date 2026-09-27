@@ -69,7 +69,8 @@ class SearchViewModelTest {
             searchCoordinator = searchCoordinator,
             getSearchHistoryUseCase = getSearchHistoryUseCase,
             clearSearchHistoryUseCase = clearSearchHistoryUseCase,
-            getActiveProfileUseCase = getActiveProfileUseCase
+            getActiveProfileUseCase = getActiveProfileUseCase,
+            dispatchers = dispatchers
         )
     }
 
