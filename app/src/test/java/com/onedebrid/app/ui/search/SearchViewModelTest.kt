@@ -56,7 +56,11 @@ class SearchViewModelTest {
         fakeSearchRepository = FakeSearchRepository()
         activeProfileFlow = MutableSharedFlow()
 
-        val searchMediaUseCase = SearchMediaUseCase(fakeMediaRepository, fakeSearchRepository, dispatchers)
+        val searchMediaUseCase = SearchMediaUseCase(
+            mediaRepository = fakeMediaRepository,
+            searchRepository = fakeSearchRepository,
+            dispatchers = dispatchers
+        )
         val coordinatorScope = CoroutineScope(testDispatcher + SupervisorJob())
 
         searchCoordinator = SearchCoordinator(searchMediaUseCase, dispatchers, coordinatorScope)
@@ -69,8 +73,7 @@ class SearchViewModelTest {
             searchCoordinator = searchCoordinator,
             getSearchHistoryUseCase = getSearchHistoryUseCase,
             clearSearchHistoryUseCase = clearSearchHistoryUseCase,
-            getActiveProfileUseCase = getActiveProfileUseCase,
-            dispatchers = dispatchers
+            getActiveProfileUseCase = getActiveProfileUseCase
         )
     }
 
