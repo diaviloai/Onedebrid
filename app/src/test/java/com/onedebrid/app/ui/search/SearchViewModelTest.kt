@@ -211,4 +211,4 @@ class SearchViewModelTest {
         override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
             RepositoryResult.Success(Unit)
     }
-}
+} 
