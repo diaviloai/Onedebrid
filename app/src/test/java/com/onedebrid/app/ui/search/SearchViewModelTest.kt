@@ -76,7 +76,8 @@ class SearchViewModelTest {
             searchRepository = fakeSearchRepository
         )
         val clearSearchHistoryUseCase = ClearSearchHistoryUseCase(
-            searchRepository = fakeSearchRepository
+            searchRepository = fakeSearchRepository,
+            dispatchers = dispatchers
         )
 
         searchViewModel = SearchViewModel(
@@ -211,4 +212,4 @@ class SearchViewModelTest {
         override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
             RepositoryResult.Success(Unit)
     }
-} 
+}
