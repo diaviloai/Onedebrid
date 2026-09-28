@@ -58,8 +58,7 @@ class SearchViewModelTest {
 
         val searchMediaUseCase = SearchMediaUseCase(
             mediaRepository = fakeMediaRepository,
-            searchRepository = fakeSearchRepository,
-            dispatchers = dispatchers
+            searchRepository = fakeSearchRepository
         )
         val coordinatorScope = CoroutineScope(testDispatcher + SupervisorJob())
 
