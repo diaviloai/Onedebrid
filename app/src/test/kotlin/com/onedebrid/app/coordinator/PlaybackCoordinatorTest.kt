@@ -59,7 +59,7 @@ class PlaybackCoordinatorTest {
         fakePlaybackRepository = FakePlaybackRepository()
 
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
-        startPlaybackSessionUseCase = TestStartPlaybackSessionUseCase(fakeSessionRepository, fakePlaybackRepository, dispatchers)
+        startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository, fakePlaybackRepository, dispatchers)
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository, dispatchers)
     }
 
@@ -155,20 +155,6 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class TestStartPlaybackSessionUseCase(
-    sessionRepository: SessionRepository,
-    playbackRepository: PlaybackRepository,
-    dispatchers: CoroutineDispatchers
-) : StartPlaybackSessionUseCase(sessionRepository, playbackRepository, dispatchers) {
-
-    override suspend fun invoke(
-        request: PlaybackRequest,
-        stream: StreamSource
-    ): RepositoryResult<Unit> {
-        return RepositoryResult.Success(Unit)
-    }
-}
-
 private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
     override val main: CoroutineDispatcher = dispatcher
     override val io: CoroutineDispatcher = dispatcher
@@ -232,7 +218,9 @@ private class FakeSessionRepository : SessionRepository {
 
     override fun getCurrentSession(): SessionState? = sessionState
 
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {
+        // No-op for testing
+    }
 
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
 
