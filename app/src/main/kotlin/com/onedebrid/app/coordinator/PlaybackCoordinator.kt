@@ -6,9 +6,9 @@ import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.StreamSource
+import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +30,7 @@ import javax.inject.Singleton
 @Singleton
 class PlaybackCoordinator @Inject constructor(
     private val resolvePlaybackUseCase: ResolvePlaybackUseCase,
-    private val startPlaybackUseCase: StartPlaybackUseCase,
+    private val startPlaybackSessionUseCase: StartPlaybackSessionUseCase,
     private val recordPlaybackUseCase: RecordPlaybackUseCase,
     private val dispatchers: CoroutineDispatchers,
     @param:ApplicationScope private val scope: CoroutineScope
@@ -55,7 +55,7 @@ class PlaybackCoordinator @Inject constructor(
                 is RepositoryResult.Success -> {
                     val source = result.data
 
-                    when (val sessionResult = startPlaybackUseCase(request, source)) {
+                    when (val sessionResult = startPlaybackSessionUseCase(request, source)) {
                         is RepositoryResult.Success -> {
                             recordPlaybackUseCase(
                                 profileId = profileId,

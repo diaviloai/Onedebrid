@@ -14,11 +14,11 @@ import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
 import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.UserProfile
+import com.onedebrid.app.domain.usecase.SavePlaybackPositionUseCase
 import com.onedebrid.app.usecase.EndPlaybackSessionUseCase
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
-import com.onedebrid.app.usecase.SavePlaybackPositionUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
