@@ -21,12 +21,11 @@ import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -39,7 +38,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackCoordinatorTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    private val testDispatcher = UnconfinedTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var fakeMediaRepository: FakeMediaRepository
@@ -104,7 +103,6 @@ class PlaybackCoordinatorTest {
         )
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
@@ -130,7 +128,6 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.searchStreamsResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
