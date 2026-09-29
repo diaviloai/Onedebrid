@@ -36,10 +36,10 @@ class StartPlaybackSessionUseCase @Inject constructor(
 
         playbackRepository.recordPlayed(
             profileId = profileId,
-            mediaId = request.mediaId,
-            episodeId = request.episodeId,
-            seasonNumber = request.seasonNumber,
-            episodeNumber = request.episodeNumber
+            mediaId = request.media.id,
+            episodeId = request.episode?.id,
+            seasonNumber = request.episode?.seasonNumber,
+            episodeNumber = request.episode?.episodeNumber
         )
 
         sessionRepository.startPlaybackSession(request, stream)

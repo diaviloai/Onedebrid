@@ -29,20 +29,19 @@ class SavePlaybackPositionUseCase @Inject constructor(
         val session = sessionRepository.getCurrentSession()
             ?: return@withContext RepositoryResult.Failure(AppError.NotAuthenticated)
 
-        val playbackSession = session.playbackSession
+        val playback = session.playback
             ?: return@withContext RepositoryResult.Failure(
                 AppError.Unknown("No active playback session found.")
             )
 
         val profileId = session.activeProfile.id
-        val request = playbackSession.request
 
         playbackRepository.saveProgress(
             profileId = profileId,
-            mediaId = request.mediaId,
-            episodeId = request.episodeId,
-            seasonNumber = request.seasonNumber,
-            episodeNumber = request.episodeNumber,
+            mediaId = playback.media.id,
+            episodeId = playback.episode?.id,
+            seasonNumber = playback.episode?.seasonNumber,
+            episodeNumber = playback.episode?.episodeNumber,
             positionMs = positionMs,
             durationMs = durationMs
         )
