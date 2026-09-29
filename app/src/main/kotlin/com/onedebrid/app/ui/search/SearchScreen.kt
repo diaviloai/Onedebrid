@@ -11,12 +11,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,12 +29,10 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.onedebrid.app.R
@@ -47,24 +49,8 @@ import com.onedebrid.app.domain.model.SearchResult
  * Details via [onNavigateToDetails], passing only the result's mediaId —
  * this screen no longer builds a PlaybackRequest itself. DetailsViewModel
  * re-fetches the full Media via GetMediaByIdUseCase and, for TV shows, the
- * episode list via GetEpisodesUseCase, then (as of Session 27) hands off
- * to Player by emitting a PlayerNavArgs and navigating with real nav args
- * (mediaId/episodeId/resumeMs) rather than an in-memory singleton. See
- * DetailsScreen.kt/DetailsViewModel.kt for that flow and NavGraph.kt for
- * the route wiring.
- *
- * This closes the "TV_SHOW not yet playable" gap this screen had prior to
- * Session 26 (PlaybackRequest requires an Episode for TV_SHOW content,
- * SearchResult/Media carried no episode data, and no episode-picker screen
- * existed yet) by giving every result type a real destination instead of
- * disabling half of them.
- *
- * One remaining known, deliberate limitation, unchanged from before: manual
- * stream-source selection isn't reachable from anywhere yet (Details' play
- * actions, like this screen's old direct-to-Player flow, always build
- * PlaybackRequest with preferredSource = null, i.e. Smart Defaults). This
- * matches Project_Design.md's Smart Defaults principle as the correct
- * default behavior, not just a shortcut taken to avoid building a picker.
+ * episode list via GetEpisodesUseCase, then hands off to Player by emitting
+ * a PlayerNavArgs and navigating with real nav args.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,24 +60,39 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var query by remember { mutableStateOf("") }
+    val query by viewModel.searchQuery.collectAsState()
 
     Column(modifier = modifier.fillMaxSize()) {
         TextField(
             value = query,
-            onValueChange = { query = it },
+            onValueChange = viewModel::onQueryChanged,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
             placeholder = { Text(stringResource(R.string.search_placeholder)) },
             leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = viewModel::clearSearch) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = null
+                        )
+                    }
+                }
+            },
             singleLine = true,
             colors = TextFieldDefaults.colors(),
-            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                onSearch = { submitSearch(query, viewModel) }
+            keyboardActions = KeyboardActions(
+                onSearch = {
+                    val trimmed = query.trim()
+                    if (trimmed.isNotEmpty()) {
+                        viewModel.search(trimmed)
+                    }
+                }
             ),
-            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                imeAction = androidx.compose.ui.text.input.ImeAction.Search
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search
             )
         )
 
@@ -100,8 +101,7 @@ fun SearchScreen(
                 is SearchState.Idle -> IdleContent(
                     history = uiState.searchHistory,
                     onHistoryItemClick = { historyQuery ->
-                        query = historyQuery
-                        submitSearch(historyQuery, viewModel)
+                        viewModel.search(historyQuery)
                     },
                     onClearHistory = viewModel::clearHistory
                 )
@@ -117,21 +117,15 @@ fun SearchScreen(
 
                 is SearchState.Error -> ErrorContent(
                     error = searchState.error,
-                    onRetry = { submitSearch(query, viewModel) }
+                    onRetry = {
+                        val trimmed = query.trim()
+                        if (trimmed.isNotEmpty()) {
+                            viewModel.search(trimmed)
+                        }
+                    }
                 )
             }
         }
-    }
-}
-
-/**
- * Submits a search if the query is non-blank, matching the general
- * principle of not sending empty queries to the search system needlessly.
- */
-private fun submitSearch(query: String, viewModel: SearchViewModel) {
-    val trimmed = query.trim()
-    if (trimmed.isNotEmpty()) {
-        viewModel.search(trimmed)
     }
 }
 
@@ -157,7 +151,8 @@ private fun IdleContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = stringResource(R.string.search_history_title),
@@ -212,15 +207,6 @@ private fun ResultsContent(
     }
 }
 
-/**
- * A single search result row.
- *
- * As of Session 26, every result is tappable — MOVIE and TV_SHOW alike —
- * since both now have a real destination (Details). Prior to this session,
- * TV_SHOW rows were rendered non-interactive with a "Not yet supported"
- * label; that label and the isPlayable split are gone now that the
- * limitation they existed to flag no longer applies.
- */
 @Composable
 private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Unit) {
     val media: Media = result.media
@@ -256,11 +242,6 @@ private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Uni
     }
 }
 
-/**
- * Error presentation. Reuses the same isRecoverable split as PlayerScreen's
- * ErrorContent (see that file for the full reasoning) rather than
- * inventing a second convention for the same AppError type.
- */
 @Composable
 private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
     val message = searchErrorMessage(error)
@@ -270,7 +251,7 @@ private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
             .fillMaxSize()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Alignment.Center
     ) {
         Text(
             text = message,
@@ -288,13 +269,6 @@ private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
     }
 }
 
-/**
- * User-facing copy for each AppError case relevant to search.
- *
- * Kept local to this screen, same convention as PlayerScreen's
- * errorMessage() — AppError is a domain type and stays presentation-
- * agnostic (Technical_standards.md).
- */
 @Composable
 private fun searchErrorMessage(error: AppError): String = when (error) {
     is AppError.NoNetworkConnection -> stringResource(R.string.player_error_no_network)
