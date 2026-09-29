@@ -29,7 +29,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -81,11 +80,6 @@ class PlaybackCoordinatorTest {
             scope = coordinatorScope
         )
 
-        val states = mutableListOf<PlaybackState>()
-        val collectJob = backgroundScope.launch(testDispatcher) {
-            playbackCoordinator.state.collect { states.add(it) }
-        }
-
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -115,11 +109,9 @@ class PlaybackCoordinatorTest {
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Ready but was $state. All states: $states", state is PlaybackState.Ready)
+        assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
-
-        collectJob.cancel()
     }
 
     @Test
@@ -133,11 +125,6 @@ class PlaybackCoordinatorTest {
             scope = coordinatorScope
         )
 
-        val states = mutableListOf<PlaybackState>()
-        val collectJob = backgroundScope.launch(testDispatcher) {
-            playbackCoordinator.state.collect { states.add(it) }
-        }
-
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
         )
@@ -149,11 +136,9 @@ class PlaybackCoordinatorTest {
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Error but was $state. All states: $states", state is PlaybackState.Error)
+        assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
-
-        collectJob.cancel()
     }
 
     @Test
@@ -210,20 +195,16 @@ private class FakeMediaRepository : MediaRepository {
 
     override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
         searchStreamsResult?.let { return it }
-        return if (resolveStreamResult is RepositoryResult.Success) {
-            RepositoryResult.Success(
-                listOf(
-                    StreamCandidate(
-                        title = "Mock Stream",
-                        hash = "mock_hash_123",
-                        magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
-                        quality = VideoQuality.HD_1080
-                    )
+        return RepositoryResult.Success(
+            listOf(
+                StreamCandidate(
+                    title = "Mock Stream",
+                    hash = "mock_hash_123",
+                    magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
+                    quality = VideoQuality.HD_1080
                 )
             )
-        } else {
-            RepositoryResult.Success(emptyList())
-        }
+        )
     }
 }
 
