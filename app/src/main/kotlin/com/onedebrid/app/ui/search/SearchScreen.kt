@@ -251,7 +251,7 @@ private fun ErrorContent(error: AppError, onRetry: () -> Unit) {
             .fillMaxSize()
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Alignment.Center
+        verticalArrangement = Arrangement.Center
     ) {
         Text(
             text = message,
