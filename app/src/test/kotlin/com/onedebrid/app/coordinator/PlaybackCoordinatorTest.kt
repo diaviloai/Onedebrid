@@ -152,7 +152,7 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatcherProvider, CoroutineDispatchers {
+private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
     override val main: CoroutineDispatcher = dispatcher
     override val io: CoroutineDispatcher = dispatcher
     override val default: CoroutineDispatcher = dispatcher
