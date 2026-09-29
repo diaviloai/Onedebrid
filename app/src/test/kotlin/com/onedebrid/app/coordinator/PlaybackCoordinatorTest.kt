@@ -218,7 +218,9 @@ private class FakeSessionRepository : SessionRepository {
 
     override fun getCurrentSession(): SessionState? = sessionState
 
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> {
+        return RepositoryResult.Success(Unit)
+    }
 
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
 
