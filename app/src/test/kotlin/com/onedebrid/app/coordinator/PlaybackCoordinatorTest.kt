@@ -26,7 +26,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -71,13 +70,12 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `play transitions to Ready on successful resolution and playback start`() = runTest(testDispatcher) {
-        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = coordinatorScope
+            scope = this
         )
 
         val request = PlaybackRequest(
@@ -116,13 +114,12 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `play transitions to Error when resolvePlaybackUseCase fails`() = runTest(testDispatcher) {
-        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = coordinatorScope
+            scope = this
         )
 
         val request = PlaybackRequest(
@@ -143,13 +140,12 @@ class PlaybackCoordinatorTest {
 
     @Test
     fun `stop resets state to Idle and cancels active jobs`() = runTest(testDispatcher) {
-        val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
-            scope = coordinatorScope
+            scope = this
         )
 
         playbackCoordinator.stop()
