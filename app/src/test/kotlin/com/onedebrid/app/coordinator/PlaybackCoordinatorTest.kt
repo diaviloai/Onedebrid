@@ -152,7 +152,7 @@ class PlaybackCoordinatorTest {
     }
 }
 
-private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
+private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatcherProvider, CoroutineDispatchers {
     override val main: CoroutineDispatcher = dispatcher
     override val io: CoroutineDispatcher = dispatcher
     override val default: CoroutineDispatcher = dispatcher
@@ -207,22 +207,31 @@ private class FakeMediaRepository : MediaRepository {
 }
 
 private class FakeSessionRepository : SessionRepository {
-    private var currentSession: SessionState = SessionState(
+    private var sessionState: SessionState? = SessionState(
         activeProfile = UserProfile(id = "profile_123", name = "Test User")
     )
 
     override fun initialise(profile: UserProfile) {
-        currentSession = SessionState(activeProfile = profile)
+        sessionState = SessionState(activeProfile = profile)
     }
 
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
-    override fun getCurrentSession(): SessionState? = currentSession
+
+    override fun getCurrentSession(): SessionState? = sessionState
+
     override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
+
     override suspend fun endPlaybackSession() {}
+
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
+
     override suspend fun clearSearchSession() {}
-    override suspend fun clearSession() {}
+
+    override suspend fun clearSession() {
+        sessionState = null
+    }
 }
 
 private class FakePlaybackRepository : PlaybackRepository {
