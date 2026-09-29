@@ -80,7 +80,10 @@ class PlaybackCoordinatorTest {
             scope = coordinatorScope
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
+        val states = mutableListOf<PlaybackState>()
+        val collectJob = backgroundScope.launch {
+            playbackCoordinator.state.collect { states.add(it) }
+        }
 
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
@@ -101,9 +104,11 @@ class PlaybackCoordinatorTest {
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
+        assertTrue("Expected PlaybackState.Ready but was $state. Collected states: $states", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
+
+        collectJob.cancel()
     }
 
     @Test
@@ -117,7 +122,10 @@ class PlaybackCoordinatorTest {
             scope = coordinatorScope
         )
 
-        backgroundScope.launch { playbackCoordinator.state.collect {} }
+        val states = mutableListOf<PlaybackState>()
+        val collectJob = backgroundScope.launch {
+            playbackCoordinator.state.collect { states.add(it) }
+        }
 
         val request = PlaybackRequest(
             media = Media(id = "1", title = "Test Movie", type = MediaType.MOVIE)
@@ -130,9 +138,11 @@ class PlaybackCoordinatorTest {
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
+        assertTrue("Expected PlaybackState.Error but was $state. Collected states: $states", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
+
+        collectJob.cancel()
     }
 
     @Test
