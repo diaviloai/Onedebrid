@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -81,7 +82,7 @@ class PlaybackCoordinatorTest {
         )
 
         val states = mutableListOf<PlaybackState>()
-        val collectJob = backgroundScope.launch {
+        val collectJob = backgroundScope.launch(testDispatcher) {
             playbackCoordinator.state.collect { states.add(it) }
         }
 
@@ -99,12 +100,22 @@ class PlaybackCoordinatorTest {
         )
 
         fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
+        fakeMediaRepository.searchStreamsResult = RepositoryResult.Success(
+            listOf(
+                StreamCandidate(
+                    title = "Mock Stream",
+                    hash = "mock_hash_123",
+                    magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
+                    quality = VideoQuality.HD_1080
+                )
+            )
+        )
 
         playbackCoordinator.play(request, profileId = "profile_123")
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Ready but was $state. Collected states: $states", state is PlaybackState.Ready)
+        assertTrue("Expected PlaybackState.Ready but was $state. All states: $states", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
         assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
 
@@ -123,7 +134,7 @@ class PlaybackCoordinatorTest {
         )
 
         val states = mutableListOf<PlaybackState>()
-        val collectJob = backgroundScope.launch {
+        val collectJob = backgroundScope.launch(testDispatcher) {
             playbackCoordinator.state.collect { states.add(it) }
         }
 
@@ -138,7 +149,7 @@ class PlaybackCoordinatorTest {
         testScheduler.advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
-        assertTrue("Expected PlaybackState.Error but was $state. Collected states: $states", state is PlaybackState.Error)
+        assertTrue("Expected PlaybackState.Error but was $state. All states: $states", state is PlaybackState.Error)
         assertEquals(expectedError, (state as PlaybackState.Error).error)
         assertEquals(0, fakePlaybackRepository.recordedHistoryCalls.size)
 
