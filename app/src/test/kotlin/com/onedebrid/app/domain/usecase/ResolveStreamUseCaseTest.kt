@@ -93,6 +93,7 @@ class ResolveStreamUseCaseTest {
         val result = useCase("test-hash")
 
         assertTrue(result is RepositoryResult.Failure)
+        assertEquals(AppError.StreamResolutionFailed, (result as RepositoryResult.Failure).error)
     }
 
     private class FakeDebridProvider(

@@ -48,9 +48,7 @@ class ResolveStreamUseCase @Inject constructor(
                 if (lastError is AppError.AllProvidersUnavailable) {
                     AppError.AllProvidersUnavailable
                 } else {
-                    AppError.StreamResolutionFailed(
-                        cause = Exception("All providers failed to resolve stream. Last error: $lastError")
-                    )
+                    AppError.StreamResolutionFailed
                 }
             )
         }
