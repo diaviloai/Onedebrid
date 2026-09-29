@@ -25,7 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -39,7 +39,7 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlaybackCoordinatorTest {
 
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var fakeMediaRepository: FakeMediaRepository
@@ -103,8 +103,10 @@ class PlaybackCoordinatorTest {
             )
         )
 
+        fakeSessionRepository.initialise(UserProfile(id = "profile_123", name = "Test User"))
+
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
@@ -130,7 +132,7 @@ class PlaybackCoordinatorTest {
         fakeMediaRepository.searchStreamsResult = RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
-        testScheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Error but was $state", state is PlaybackState.Error)
@@ -149,7 +151,7 @@ class PlaybackCoordinatorTest {
         )
 
         playbackCoordinator.stop()
-        testScheduler.advanceUntilIdle()
+        advanceUntilIdle()
 
         assertEquals(PlaybackState.Idle, playbackCoordinator.state.value)
     }
