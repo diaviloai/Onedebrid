@@ -207,9 +207,16 @@ private class FakeMediaRepository : MediaRepository {
 }
 
 private class FakeSessionRepository : SessionRepository {
-    override fun initialise(profile: UserProfile) {}
+    private var currentSession: SessionState = SessionState(
+        activeProfile = UserProfile(id = "profile_123", name = "Test User")
+    )
+
+    override fun initialise(profile: UserProfile) {
+        currentSession = SessionState(activeProfile = profile)
+    }
+
     override fun observeSession(): Flow<SessionState> = MutableSharedFlow()
-    override fun getCurrentSession(): SessionState? = null
+    override fun getCurrentSession(): SessionState? = currentSession
     override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() {}
