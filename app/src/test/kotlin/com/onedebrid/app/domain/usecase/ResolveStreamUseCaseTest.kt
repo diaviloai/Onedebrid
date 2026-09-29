@@ -6,8 +6,10 @@ import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.error.ProviderError
 import com.onedebrid.app.domain.error.ProviderResult
 import com.onedebrid.app.domain.model.StreamSource
+import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.provider.debrid.AccountInfo
 import com.onedebrid.app.provider.debrid.DebridProvider
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -19,16 +21,17 @@ import org.junit.Test
 class ResolveStreamUseCaseTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
-    private val dispatchers = CoroutineDispatchers(
-        main = testDispatcher,
-        io = testDispatcher,
-        default = testDispatcher
-    )
+    private val dispatchers = object : CoroutineDispatchers {
+        override val main: CoroutineDispatcher = testDispatcher
+        override val io: CoroutineDispatcher = testDispatcher
+        override val default: CoroutineDispatcher = testDispatcher
+    }
 
     private val mockStream = StreamSource(
+        id = "stream-1",
+        mediaId = "media-123",
         url = "https://stream.debrid.com/video.mkv",
-        quality = "1080p",
-        providerName = "Real-Debrid"
+        quality = VideoQuality.HD_1080
     )
 
     @Test
