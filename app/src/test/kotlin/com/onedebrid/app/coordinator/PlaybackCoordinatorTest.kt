@@ -17,9 +17,9 @@ import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.domain.model.WatchedItem
+import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.usecase.StartPlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +48,7 @@ class PlaybackCoordinatorTest {
     private lateinit var fakePlaybackRepository: FakePlaybackRepository
 
     private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
-    private lateinit var startPlaybackUseCase: StartPlaybackUseCase
+    private lateinit var startPlaybackSessionUseCase: StartPlaybackSessionUseCase
     private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
     private lateinit var playbackCoordinator: PlaybackCoordinator
 
@@ -60,7 +60,7 @@ class PlaybackCoordinatorTest {
         fakePlaybackRepository = FakePlaybackRepository()
 
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
-        startPlaybackUseCase = StartPlaybackUseCase(fakeSessionRepository, dispatchers)
+        startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository, fakePlaybackRepository, dispatchers)
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository, dispatchers)
     }
 
@@ -74,7 +74,7 @@ class PlaybackCoordinatorTest {
         val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
-            startPlaybackUseCase = startPlaybackUseCase,
+            startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = coordinatorScope
@@ -111,7 +111,7 @@ class PlaybackCoordinatorTest {
         val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
-            startPlaybackUseCase = startPlaybackUseCase,
+            startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = coordinatorScope
@@ -140,7 +140,7 @@ class PlaybackCoordinatorTest {
         val coordinatorScope = CoroutineScope(coroutineContext + testDispatcher)
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
-            startPlaybackUseCase = startPlaybackUseCase,
+            startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = coordinatorScope
