@@ -28,7 +28,6 @@ import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.usecase.StartPlaybackSessionUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,7 +54,6 @@ class PlayerViewModelTest {
 
     private lateinit var playbackCoordinator: PlaybackCoordinator
     private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
-    private lateinit var startPlaybackSessionUseCase: StartPlaybackSessionUseCase
     private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
 
     private lateinit var getMediaByIdUseCase: GetMediaByIdUseCase
@@ -79,19 +77,17 @@ class PlayerViewModelTest {
         fakePlaybackRepository = FakePlaybackRepository()
 
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
-        startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository)
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository)
 
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
-            startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = TestScope(testDispatcher)
         )
 
-        getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository, dispatchers)
-        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository, dispatchers)
+        getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository)
+        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository)
         getActiveProfileUseCase = GetActiveProfileUseCase(fakeProfileRepository)
         savePlaybackPositionUseCase = SavePlaybackPositionUseCase(
             playbackRepository = fakePlaybackRepository,
