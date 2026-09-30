@@ -173,9 +173,8 @@ class PlayerViewModel @Inject constructor(
         positionSaveJob = viewModelScope.launch {
             while (isActive) {
                 delay(POSITION_SAVE_INTERVAL_MS)
-                if (isActive) {
-                    savePlaybackPositionUseCase(lastKnownPositionMs, lastKnownDurationMs)
-                }
+                if (!isActive) break
+                savePlaybackPositionUseCase(lastKnownPositionMs, lastKnownDurationMs)
             }
         }
     }

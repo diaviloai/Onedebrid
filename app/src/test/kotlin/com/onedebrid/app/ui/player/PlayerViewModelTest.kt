@@ -139,12 +139,13 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         val uiState = viewModel.uiState.value
         assertEquals(ResolveState.Resolved, uiState.resolveState)
 
         viewModel.stop()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -171,13 +172,14 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         val uiState = viewModel.uiState.value
         assertTrue(uiState.resolveState is ResolveState.Error)
         assertEquals(expectedError, (uiState.resolveState as ResolveState.Error).error)
 
         viewModel.stop()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -197,20 +199,22 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         viewModel.onPlayerStateChanged(PlayerLifecycleState.PLAYING, positionMs = 10_000L, durationMs = 100_000L)
 
-        advanceTimeBy(5_001L)
+        testScheduler.advanceTimeBy(5_001L)
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
-        advanceTimeBy(5_000L)
+        testScheduler.advanceTimeBy(5_000L)
 
         assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
 
+        // Stop position saving and clear pending delayed tasks before ending test
         viewModel.stop()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -230,15 +234,16 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
         viewModel.stop()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -258,10 +263,10 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         viewModel.stop()
-        advanceUntilIdle()
+        testScheduler.advanceUntilIdle()
 
         assertEquals(CoordinatorState.Idle, playbackCoordinator.state.value)
         assertTrue(fakeSessionRepository.endedPlaybackSession)
