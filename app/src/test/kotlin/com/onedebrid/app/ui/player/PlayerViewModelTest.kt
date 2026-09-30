@@ -197,16 +197,16 @@ class PlayerViewModelTest {
 
         viewModel.onPlayerStateChanged(PlayerLifecycleState.PLAYING, positionMs = 10_000L, durationMs = 100_000L)
 
-        advanceTimeBy(5_000L)
-        advanceUntilIdle()
+        advanceTimeBy(5_001L)
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
         advanceTimeBy(5_000L)
-        advanceUntilIdle()
 
         assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
+
+        viewModel.stop()
     }
 
     @Test
