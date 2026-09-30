@@ -22,13 +22,13 @@ import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.domain.usecase.SavePlaybackPositionUseCase
+import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import com.onedebrid.app.usecase.EndPlaybackSessionUseCase
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.usecase.StartPlaybackSessionUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -90,8 +90,8 @@ class PlayerViewModelTest {
             scope = TestScope(testDispatcher)
         )
 
-        getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository, dispatchers)
-        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository, dispatchers)
+        getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository)
+        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository)
         getActiveProfileUseCase = GetActiveProfileUseCase(fakeProfileRepository)
         savePlaybackPositionUseCase = SavePlaybackPositionUseCase(
             playbackRepository = fakePlaybackRepository,
@@ -291,7 +291,7 @@ private class FakeSessionRepository : SessionRepository {
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = flowOf(SessionState(activeProfile = UserProfile("profile_123", "Test User")))
     override fun getCurrentSession(): SessionState = SessionState(activeProfile = UserProfile("profile_123", "Test User"))
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() { endedPlaybackSession = true }
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
