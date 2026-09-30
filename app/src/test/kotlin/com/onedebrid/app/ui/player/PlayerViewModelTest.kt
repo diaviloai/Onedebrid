@@ -86,7 +86,10 @@ class PlayerViewModelTest {
             playbackRepository = fakePlaybackRepository,
             dispatchers = dispatchers
         )
-        recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository)
+        recordPlaybackUseCase = RecordPlaybackUseCase(
+            playbackRepository = fakePlaybackRepository,
+            dispatchers = dispatchers
+        )
 
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
