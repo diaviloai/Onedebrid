@@ -143,6 +143,8 @@ class PlayerViewModelTest {
 
         val uiState = viewModel.uiState.value
         assertEquals(ResolveState.Resolved, uiState.resolveState)
+
+        viewModel.stop()
     }
 
     @Test
@@ -174,6 +176,8 @@ class PlayerViewModelTest {
         val uiState = viewModel.uiState.value
         assertTrue(uiState.resolveState is ResolveState.Error)
         assertEquals(expectedError, (uiState.resolveState as ResolveState.Error).error)
+
+        viewModel.stop()
     }
 
     @Test
@@ -233,6 +237,8 @@ class PlayerViewModelTest {
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
+
+        viewModel.stop()
     }
 
     @Test
