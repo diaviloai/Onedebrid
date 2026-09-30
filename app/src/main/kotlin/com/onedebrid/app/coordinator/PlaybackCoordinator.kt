@@ -1,14 +1,13 @@
 package com.onedebrid.app.coordinator
 
-import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.di.ApplicationScope
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.StreamSource
-import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
+import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
+import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,76 +17,48 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Coordinates the playback workflow.
- *
- * Accepts a PlaybackRequest, resolves it to a StreamSource,
- * registers the session, and records history. Exposes observable
- * state so the player ViewModel can react without polling.
- *
- * Cancels any in-progress resolution if a new request arrives.
- */
+sealed interface PlaybackState {
+    data object Idle : PlaybackState
+    data class Resolving(val request: PlaybackRequest) : PlaybackState
+    data class Ready(val request: PlaybackRequest, val stream: StreamSource) : PlaybackState
+    data class Error(val request: PlaybackRequest, val error: AppError) : PlaybackState
+}
+
 @Singleton
 class PlaybackCoordinator @Inject constructor(
     private val resolvePlaybackUseCase: ResolvePlaybackUseCase,
     private val startPlaybackSessionUseCase: StartPlaybackSessionUseCase,
     private val recordPlaybackUseCase: RecordPlaybackUseCase,
     private val dispatchers: CoroutineDispatchers,
-    @param:ApplicationScope private val scope: CoroutineScope
+    private val scope: CoroutineScope
 ) {
-
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
 
-    private var activeJob: Job? = null
+    private var currentJob: Job? = null
 
-    /**
-     * Begin the playback workflow for the given request.
-     *
-     * Cancels any in-progress resolution before starting.
-     */
     fun play(request: PlaybackRequest, profileId: String) {
-        activeJob?.cancel()
-        activeJob = scope.launch(dispatchers.default) {
-            _state.value = PlaybackState.Resolving
+        currentJob?.cancel()
+        _state.value = PlaybackState.Resolving(request)
 
-            when (val result = resolvePlaybackUseCase(request, profileId)) {
+        currentJob = scope.launch(dispatchers.main) {
+            when (val result = resolvePlaybackUseCase(request)) {
                 is RepositoryResult.Success -> {
-                    val source = result.data
-
-                    when (val sessionResult = startPlaybackSessionUseCase(request, source)) {
-                        is RepositoryResult.Success -> {
-                            recordPlaybackUseCase(
-                                profileId = profileId,
-                                mediaId = request.media.id,
-                                episodeId = request.episode?.id
-                            )
-                            _state.value = PlaybackState.Ready(source)
-                        }
-                        is RepositoryResult.Failure -> {
-                            _state.value = PlaybackState.Error(sessionResult.error)
-                        }
-                    }
+                    val stream = result.data
+                    startPlaybackSessionUseCase(request, stream)
+                    recordPlaybackUseCase(request, profileId)
+                    _state.value = PlaybackState.Ready(request, stream)
                 }
                 is RepositoryResult.Failure -> {
-                    _state.value = PlaybackState.Error(result.error)
+                    _state.value = PlaybackState.Error(request, result.error)
                 }
             }
         }
     }
 
-    /**
-     * Stop the current playback session and reset state.
-     */
     fun stop() {
-        activeJob?.cancel()
+        currentJob?.cancel()
+        currentJob = null
         _state.value = PlaybackState.Idle
     }
-}
-
-sealed interface PlaybackState {
-    data object Idle : PlaybackState
-    data object Resolving : PlaybackState
-    data class Ready(val source: StreamSource) : PlaybackState
-    data class Error(val error: AppError) : PlaybackState
 }
