@@ -78,8 +78,15 @@ class PlayerViewModelTest {
         fakeSessionRepository = FakeSessionRepository()
         fakePlaybackRepository = FakePlaybackRepository()
 
-        resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
-        startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository)
+        resolvePlaybackUseCase = ResolvePlaybackUseCase(
+            mediaRepository = fakeMediaRepository,
+            playbackRepository = fakePlaybackRepository,
+            dispatchers = dispatchers
+        )
+        startPlaybackSessionUseCase = StartPlaybackSessionUseCase(
+            sessionRepository = fakeSessionRepository,
+            dispatchers = dispatchers
+        )
         recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository)
 
         playbackCoordinator = PlaybackCoordinator(
@@ -291,7 +298,7 @@ private class FakeSessionRepository : SessionRepository {
     override fun initialise(profile: UserProfile) {}
     override fun observeSession(): Flow<SessionState> = flowOf(SessionState(activeProfile = UserProfile("profile_123", "Test User")))
     override fun getCurrentSession(): SessionState = SessionState(activeProfile = UserProfile("profile_123", "Test User"))
-    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
+    override suspend fun startPlaybackSession(request: PlaybackRequest, stream: StreamSource) {}
     override suspend fun updatePlaybackPosition(positionMs: Long) {}
     override suspend fun endPlaybackSession() { endedPlaybackSession = true }
     override suspend fun updateSearchSession(query: String, filters: Map<String, String>) {}
