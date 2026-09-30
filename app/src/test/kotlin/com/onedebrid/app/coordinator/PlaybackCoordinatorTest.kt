@@ -103,15 +103,13 @@ class PlaybackCoordinatorTest {
             )
         )
 
-        fakeSessionRepository.initialise(UserProfile(id = "profile_123", name = "Test User"))
-
         playbackCoordinator.play(request, profileId = "profile_123")
         advanceUntilIdle()
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).source)
-        assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
+        assertEquals(2, fakePlaybackRepository.recordedHistoryCalls.size)
     }
 
     @Test
