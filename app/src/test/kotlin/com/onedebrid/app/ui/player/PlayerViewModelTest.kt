@@ -29,12 +29,10 @@ import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
-import com.onedebrid.app.usecase.StartPlaybackSessionUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -56,9 +54,8 @@ class PlayerViewModelTest {
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var playbackCoordinator: PlaybackCoordinator
-    private lateinit var fakeResolvePlaybackUseCase: FakeResolvePlaybackUseCase
-    private lateinit var fakeStartPlaybackSessionUseCase: FakeStartPlaybackSessionUseCase
-    private lateinit var fakeRecordPlaybackUseCase: FakeRecordPlaybackUseCase
+    private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
+    private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
 
     private lateinit var getMediaByIdUseCase: GetMediaByIdUseCase
     private lateinit var getEpisodeByIdUseCase: GetEpisodeByIdUseCase
@@ -80,14 +77,12 @@ class PlayerViewModelTest {
         fakeSessionRepository = FakeSessionRepository()
         fakePlaybackRepository = FakePlaybackRepository()
 
-        fakeResolvePlaybackUseCase = FakeResolvePlaybackUseCase(fakeMediaRepository)
-        fakeStartPlaybackSessionUseCase = FakeStartPlaybackSessionUseCase(fakeSessionRepository)
-        fakeRecordPlaybackUseCase = FakeRecordPlaybackUseCase(fakePlaybackRepository)
+        resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
+        recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository)
 
         playbackCoordinator = PlaybackCoordinator(
-            resolvePlaybackUseCase = fakeResolvePlaybackUseCase,
-            startPlaybackSessionUseCase = fakeStartPlaybackSessionUseCase,
-            recordPlaybackUseCase = fakeRecordPlaybackUseCase,
+            resolvePlaybackUseCase = resolvePlaybackUseCase,
+            recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = TestScope(testDispatcher)
         )
@@ -140,7 +135,7 @@ class PlayerViewModelTest {
 
     @Test
     fun `init sets ResolveState Error on media resolution failure`() = runTest(testDispatcher) {
-        val expectedError = AppError.NetworkError
+        val expectedError = AppError.Network.NoConnection
         fakeMediaRepository.mediaResult = RepositoryResult.Failure(expectedError)
 
         val savedStateHandle = SavedStateHandle(
@@ -261,50 +256,15 @@ private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : Corout
     override val default: CoroutineDispatcher = dispatcher
 }
 
-private class FakeResolvePlaybackUseCase(
-    private val mediaRepository: MediaRepository
-) : ResolvePlaybackUseCase(mediaRepository, TestCoroutineDispatchers(StandardTestDispatcher())) {
-    override suspend fun invoke(request: PlaybackRequest): RepositoryResult<StreamSource> {
-        return RepositoryResult.Success(
-            StreamSource(
-                id = "s1",
-                mediaId = request.media.id,
-                url = "https://example.com/stream.mp4",
-                quality = VideoQuality.HD_1080,
-                sizeBytes = 1000L,
-                filename = "test.mp4"
-            )
-        )
-    }
-}
-
-private class FakeStartPlaybackSessionUseCase(
-    private val sessionRepository: SessionRepository
-) : StartPlaybackSessionUseCase(sessionRepository, TestCoroutineDispatchers(StandardTestDispatcher())) {
-    override suspend fun invoke(request: PlaybackRequest, stream: StreamSource): RepositoryResult<Unit> {
-        return RepositoryResult.Success(Unit)
-    }
-}
-
-private class FakeRecordPlaybackUseCase(
-    private val playbackRepository: PlaybackRepository
-) : RecordPlaybackUseCase(playbackRepository, TestCoroutineDispatchers(StandardTestDispatcher())) {
-    override suspend fun invoke(
-        profileId: String,
-        mediaId: String,
-        episodeId: String?,
-        seasonNumber: Int?,
-        episodeNumber: Int?
-    ): RepositoryResult<Unit> {
-        return RepositoryResult.Success(Unit)
-    }
-}
-
 private class FakeProfileRepository : ProfileRepository {
-    override fun observeActiveProfile(): Flow<UserProfile?> = flowOf(UserProfile("profile_123", "Test User"))
-    override suspend fun getActiveProfile(): RepositoryResult<UserProfile?> = RepositoryResult.Success(UserProfile("profile_123", "Test User"))
-    override suspend fun getAllProfiles(): RepositoryResult<List<UserProfile>> = RepositoryResult.Success(listOf(UserProfile("profile_123", "Test User")))
-    override suspend fun createProfile(name: String, avatarUrl: String?): RepositoryResult<UserProfile> = RepositoryResult.Success(UserProfile("profile_123", name))
+    private val defaultProfile = UserProfile("profile_123", "Test User")
+
+    override fun observeActiveProfile(): Flow<UserProfile> = flowOf(defaultProfile)
+    override fun observeProfiles(): Flow<List<UserProfile>> = flowOf(listOf(defaultProfile))
+    override suspend fun getActiveProfile(): RepositoryResult<UserProfile> = RepositoryResult.Success(defaultProfile)
+    override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> = RepositoryResult.Success(defaultProfile)
+    override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
+    override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
     override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
     override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
 }
