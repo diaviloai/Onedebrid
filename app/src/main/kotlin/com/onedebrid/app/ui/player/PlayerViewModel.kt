@@ -65,10 +65,11 @@ class PlayerViewModel @Inject constructor(
     private var lastKnownDurationMs: Long = 0L
 
     private var positionSaveJob: Job? = null
+    private var coordinatorStateJob: Job? = null
     private var activeProfileId: String? = null
 
     init {
-        playbackCoordinator.state
+        coordinatorStateJob = playbackCoordinator.state
             .onEach { coordinatorState ->
                 _uiState.value = _uiState.value.copy(coordinatorState = coordinatorState)
             }
@@ -186,6 +187,8 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         stopPositionSaving()
+        coordinatorStateJob?.cancel()
+        coordinatorStateJob = null
         super.onCleared()
     }
 }

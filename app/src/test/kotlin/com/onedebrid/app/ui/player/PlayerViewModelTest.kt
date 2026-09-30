@@ -36,8 +36,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -139,13 +137,13 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val uiState = viewModel.uiState.value
         assertEquals(ResolveState.Resolved, uiState.resolveState)
 
         viewModel.stop()
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
     }
 
     @Test
@@ -172,14 +170,14 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         val uiState = viewModel.uiState.value
         assertTrue(uiState.resolveState is ResolveState.Error)
         assertEquals(expectedError, (uiState.resolveState as ResolveState.Error).error)
 
         viewModel.stop()
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
     }
 
     @Test
@@ -199,22 +197,23 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         viewModel.onPlayerStateChanged(PlayerLifecycleState.PLAYING, positionMs = 10_000L, durationMs = 100_000L)
 
         testScheduler.advanceTimeBy(5_001L)
+        testScheduler.runCurrent()
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
         testScheduler.advanceTimeBy(5_000L)
+        testScheduler.runCurrent()
 
         assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
 
-        // Stop position saving and clear pending delayed tasks before ending test
         viewModel.stop()
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
     }
 
     @Test
@@ -234,16 +233,16 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
         assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
         viewModel.stop()
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
     }
 
     @Test
@@ -263,10 +262,10 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         viewModel.stop()
-        testScheduler.advanceUntilIdle()
+        testScheduler.runCurrent()
 
         assertEquals(CoordinatorState.Idle, playbackCoordinator.state.value)
         assertTrue(fakeSessionRepository.endedPlaybackSession)
