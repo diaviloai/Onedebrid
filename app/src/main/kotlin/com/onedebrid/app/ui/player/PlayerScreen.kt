@@ -62,8 +62,8 @@ fun PlayerScreen(
     val coordinatorState = uiState.coordinatorState
     when (coordinatorState) {
         is CoordinatorState.Ready -> {
-            DisposableEffect(coordinatorState.source.id) {
-                val mediaItem = MediaItem.fromUri(coordinatorState.source.url)
+            DisposableEffect(coordinatorState.stream.id) {
+                val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
                 exoPlayer.setMediaItem(mediaItem)
                 exoPlayer.prepare()
                 exoPlayer.playWhenReady = true
