@@ -5,7 +5,6 @@ import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import kotlinx.coroutines.CoroutineScope
@@ -28,7 +27,6 @@ sealed interface PlaybackState {
 class PlaybackCoordinator @Inject constructor(
     private val resolvePlaybackUseCase: ResolvePlaybackUseCase,
     private val startPlaybackSessionUseCase: StartPlaybackSessionUseCase,
-    private val recordPlaybackUseCase: RecordPlaybackUseCase,
     private val dispatchers: CoroutineDispatchers,
     private val scope: CoroutineScope
 ) {
@@ -45,8 +43,7 @@ class PlaybackCoordinator @Inject constructor(
             when (val result = resolvePlaybackUseCase(request)) {
                 is RepositoryResult.Success -> {
                     val stream = result.data
-                    startPlaybackSessionUseCase(request, stream, profileId)
-                    recordPlaybackUseCase(profileId, request)
+                    startPlaybackSessionUseCase(request, stream)
                     _state.value = PlaybackState.Ready(request, stream)
                 }
                 is RepositoryResult.Failure -> {
