@@ -1,5 +1,6 @@
 package com.onedebrid.app.coordinator
 
+import com.onedebrid.app.di.ApplicationScope
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.PlaybackRequest
@@ -28,7 +29,7 @@ class PlaybackCoordinator @Inject constructor(
     private val resolvePlaybackUseCase: ResolvePlaybackUseCase,
     private val startPlaybackSessionUseCase: StartPlaybackSessionUseCase,
     private val dispatchers: CoroutineDispatchers,
-    private val scope: CoroutineScope
+    @ApplicationScope private val scope: CoroutineScope
 ) {
     private val _state = MutableStateFlow<PlaybackState>(PlaybackState.Idle)
     val state: StateFlow<PlaybackState> = _state.asStateFlow()
