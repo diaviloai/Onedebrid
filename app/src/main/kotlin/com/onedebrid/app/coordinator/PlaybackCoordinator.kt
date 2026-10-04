@@ -45,8 +45,8 @@ class PlaybackCoordinator @Inject constructor(
             when (val result = resolvePlaybackUseCase(request)) {
                 is RepositoryResult.Success -> {
                     val stream = result.data
-                    startPlaybackSessionUseCase(request, stream)
-                    recordPlaybackUseCase(request, profileId)
+                    startPlaybackSessionUseCase(request, stream, profileId)
+                    recordPlaybackUseCase(profileId, request)
                     _state.value = PlaybackState.Ready(request, stream)
                 }
                 is RepositoryResult.Failure -> {
@@ -62,4 +62,3 @@ class PlaybackCoordinator @Inject constructor(
         _state.value = PlaybackState.Idle
     }
 }
- 
