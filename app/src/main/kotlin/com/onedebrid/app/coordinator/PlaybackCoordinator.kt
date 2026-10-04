@@ -40,7 +40,7 @@ class PlaybackCoordinator @Inject constructor(
         _state.value = PlaybackState.Resolving(request)
 
         currentJob = scope.launch(dispatchers.main) {
-            when (val result = resolvePlaybackUseCase(request)) {
+            when (val result = resolvePlaybackUseCase(request, profileId)) {
                 is RepositoryResult.Success -> {
                     val stream = result.data
                     startPlaybackSessionUseCase(request, stream)
