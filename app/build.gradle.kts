@@ -1,3 +1,5 @@
+import java.time.Duration
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -59,7 +61,7 @@ android {
                 exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
             }
             // FORCE FAIL-FAST: Kills any hanging test after 30 seconds and logs the culprit
-            it.timeout.set(java.time.Duration.ofSeconds(30))
+            it.timeout.set(Duration.ofSeconds(30))
         }
     }
 }
