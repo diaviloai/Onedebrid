@@ -27,7 +27,6 @@ import com.onedebrid.app.usecase.EndPlaybackSessionUseCase
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
-import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +53,6 @@ class PlayerViewModelTest {
     private lateinit var playbackCoordinator: PlaybackCoordinator
     private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
     private lateinit var startPlaybackSessionUseCase: StartPlaybackSessionUseCase
-    private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
 
     private lateinit var getMediaByIdUseCase: GetMediaByIdUseCase
     private lateinit var getEpisodeByIdUseCase: GetEpisodeByIdUseCase
@@ -84,15 +82,10 @@ class PlayerViewModelTest {
             playbackRepository = fakePlaybackRepository,
             dispatchers = dispatchers
         )
-        recordPlaybackUseCase = RecordPlaybackUseCase(
-            playbackRepository = fakePlaybackRepository,
-            dispatchers = dispatchers
-        )
 
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
-            recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = TestScope(testDispatcher)
         )

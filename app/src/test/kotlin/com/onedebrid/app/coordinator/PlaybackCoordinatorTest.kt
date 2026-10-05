@@ -18,7 +18,6 @@ import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
-import com.onedebrid.app.usecase.RecordPlaybackUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -48,7 +47,6 @@ class PlaybackCoordinatorTest {
 
     private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
     private lateinit var startPlaybackSessionUseCase: StartPlaybackSessionUseCase
-    private lateinit var recordPlaybackUseCase: RecordPlaybackUseCase
     private lateinit var playbackCoordinator: PlaybackCoordinator
 
     @Before
@@ -60,7 +58,6 @@ class PlaybackCoordinatorTest {
 
         resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
         startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository, fakePlaybackRepository, dispatchers)
-        recordPlaybackUseCase = RecordPlaybackUseCase(fakePlaybackRepository, dispatchers)
     }
 
     @After
@@ -73,7 +70,6 @@ class PlaybackCoordinatorTest {
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
-            recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = this
         )
@@ -108,7 +104,7 @@ class PlaybackCoordinatorTest {
 
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
-        assertEquals(streamSource, (state as PlaybackState.Ready).source)
+        assertEquals(streamSource, (state as PlaybackState.Ready).stream)
         assertEquals(2, fakePlaybackRepository.recordedHistoryCalls.size)
     }
 
@@ -117,7 +113,6 @@ class PlaybackCoordinatorTest {
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
-            recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = this
         )
@@ -143,7 +138,6 @@ class PlaybackCoordinatorTest {
         playbackCoordinator = PlaybackCoordinator(
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
-            recordPlaybackUseCase = recordPlaybackUseCase,
             dispatchers = dispatchers,
             scope = this
         )
