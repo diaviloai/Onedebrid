@@ -36,6 +36,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -49,8 +50,9 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
-    private val dispatchers = TestCoroutineDispatchers(testDispatcher)
+    private lateinit var testDispatcher: TestDispatcher
+    private lateinit var dispatchers: CoroutineDispatchers
+    private lateinit var coordinatorScope: TestScope
 
     private lateinit var playbackCoordinator: PlaybackCoordinator
     private lateinit var resolvePlaybackUseCase: ResolvePlaybackUseCase
@@ -69,7 +71,11 @@ class PlayerViewModelTest {
 
     @Before
     fun setup() {
+        // Initialize a fresh dispatcher and scope for EVERY test to prevent cross-test leaks
+        testDispatcher = StandardTestDispatcher()
+        dispatchers = TestCoroutineDispatchers(testDispatcher)
         Dispatchers.setMain(testDispatcher)
+        coordinatorScope = TestScope(testDispatcher)
 
         fakeMediaRepository = FakeMediaRepository()
         fakeProfileRepository = FakeProfileRepository()
@@ -89,7 +95,7 @@ class PlayerViewModelTest {
             resolvePlaybackUseCase = resolvePlaybackUseCase,
             startPlaybackSessionUseCase = startPlaybackSessionUseCase,
             dispatchers = dispatchers,
-            scope = TestScope(testDispatcher)
+            scope = coordinatorScope
         )
 
         getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository)
@@ -105,6 +111,7 @@ class PlayerViewModelTest {
 
     @After
     fun tearDown() {
+        coordinatorScope.cancel()
         Dispatchers.resetMain()
     }
 
@@ -132,14 +139,17 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.runCurrent()
+        try {
+            testScheduler.runCurrent()
 
-        val uiState = viewModel.uiState.value
-        assertEquals(ResolveState.Resolved, uiState.resolveState)
+            val uiState = viewModel.uiState.value
+            assertEquals(ResolveState.Resolved, uiState.resolveState)
 
-        viewModel.stop()
-        testScheduler.runCurrent()
-        viewModel.viewModelScope.cancel()
+            viewModel.stop()
+            testScheduler.runCurrent()
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 
     @Test
@@ -166,15 +176,18 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.runCurrent()
+        try {
+            testScheduler.runCurrent()
 
-        val uiState = viewModel.uiState.value
-        assertTrue(uiState.resolveState is ResolveState.Error)
-        assertEquals(expectedError, (uiState.resolveState as ResolveState.Error).error)
+            val uiState = viewModel.uiState.value
+            assertTrue(uiState.resolveState is ResolveState.Error)
+            assertEquals(expectedError, (uiState.resolveState as ResolveState.Error).error)
 
-        viewModel.stop()
-        testScheduler.runCurrent()
-        viewModel.viewModelScope.cancel()
+            viewModel.stop()
+            testScheduler.runCurrent()
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 
     @Test
@@ -194,24 +207,27 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.runCurrent()
+        try {
+            testScheduler.runCurrent()
 
-        viewModel.onPlayerStateChanged(PlayerLifecycleState.PLAYING, positionMs = 10_000L, durationMs = 100_000L)
+            viewModel.onPlayerStateChanged(PlayerLifecycleState.PLAYING, positionMs = 10_000L, durationMs = 100_000L)
 
-        testScheduler.advanceTimeBy(5_001L)
-        testScheduler.runCurrent()
+            testScheduler.advanceTimeBy(5_001L)
+            testScheduler.runCurrent()
 
-        assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
-        assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
+            assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
+            assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
-        testScheduler.advanceTimeBy(5_000L)
-        testScheduler.runCurrent()
+            testScheduler.advanceTimeBy(5_000L)
+            testScheduler.runCurrent()
 
-        assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
+            assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
 
-        viewModel.stop()
-        testScheduler.runCurrent()
-        viewModel.viewModelScope.cancel()
+            viewModel.stop()
+            testScheduler.runCurrent()
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 
     @Test
@@ -231,17 +247,20 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.runCurrent()
+        try {
+            testScheduler.runCurrent()
 
-        viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
-        testScheduler.runCurrent()
+            viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
+            testScheduler.runCurrent()
 
-        assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
-        assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
+            assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
+            assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
 
-        viewModel.stop()
-        testScheduler.runCurrent()
-        viewModel.viewModelScope.cancel()
+            viewModel.stop()
+            testScheduler.runCurrent()
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 
     @Test
@@ -261,15 +280,17 @@ class PlayerViewModelTest {
             endPlaybackSessionUseCase = endPlaybackSessionUseCase
         )
 
-        testScheduler.runCurrent()
+        try {
+            testScheduler.runCurrent()
 
-        viewModel.stop()
-        testScheduler.runCurrent()
+            viewModel.stop()
+            testScheduler.runCurrent()
 
-        assertEquals(CoordinatorState.Idle, playbackCoordinator.state.value)
-        assertTrue(fakeSessionRepository.endedPlaybackSession)
-        
-        viewModel.viewModelScope.cancel()
+            assertEquals(CoordinatorState.Idle, playbackCoordinator.state.value)
+            assertTrue(fakeSessionRepository.endedPlaybackSession)
+        } finally {
+            viewModel.viewModelScope.cancel()
+        }
     }
 }
 
