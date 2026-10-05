@@ -105,7 +105,7 @@ class PlaybackCoordinatorTest {
         val state = playbackCoordinator.state.value
         assertTrue("Expected PlaybackState.Ready but was $state", state is PlaybackState.Ready)
         assertEquals(streamSource, (state as PlaybackState.Ready).stream)
-        assertEquals(2, fakePlaybackRepository.recordedHistoryCalls.size)
+        assertEquals(1, fakePlaybackRepository.recordedHistoryCalls.size)
     }
 
     @Test

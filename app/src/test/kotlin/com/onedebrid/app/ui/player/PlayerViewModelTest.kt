@@ -1,6 +1,7 @@
 package com.onedebrid.app.ui.player
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
 import com.onedebrid.app.coordinator.PlaybackCoordinator
 import com.onedebrid.app.coordinator.PlaybackState as CoordinatorState
 import com.onedebrid.app.data.repository.MediaRepository
@@ -31,6 +32,7 @@ import com.onedebrid.app.usecase.ResolvePlaybackUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -137,6 +139,7 @@ class PlayerViewModelTest {
 
         viewModel.stop()
         testScheduler.runCurrent()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -171,6 +174,7 @@ class PlayerViewModelTest {
 
         viewModel.stop()
         testScheduler.runCurrent()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -207,6 +211,7 @@ class PlayerViewModelTest {
 
         viewModel.stop()
         testScheduler.runCurrent()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -236,6 +241,7 @@ class PlayerViewModelTest {
 
         viewModel.stop()
         testScheduler.runCurrent()
+        viewModel.viewModelScope.cancel()
     }
 
     @Test
@@ -262,6 +268,8 @@ class PlayerViewModelTest {
 
         assertEquals(CoordinatorState.Idle, playbackCoordinator.state.value)
         assertTrue(fakeSessionRepository.endedPlaybackSession)
+        
+        viewModel.viewModelScope.cancel()
     }
 }
 
