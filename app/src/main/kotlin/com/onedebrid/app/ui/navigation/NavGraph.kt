@@ -15,14 +15,6 @@ import com.onedebrid.app.ui.settings.SettingsScreen
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-// Data class to safely pass arguments to the Player route
-data class PlayerNavArgs(
-    val mediaId: String,
-    val episodeId: String? = null,
-    val resumeMs: Long? = null,
-    val preferredSourceJson: String? = null
-)
-
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Search : Screen("search")
