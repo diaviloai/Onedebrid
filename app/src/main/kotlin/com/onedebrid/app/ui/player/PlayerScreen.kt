@@ -25,9 +25,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.onedebrid.app.R
 import com.onedebrid.app.coordinator.PlaybackState as CoordinatorState
@@ -42,13 +48,55 @@ fun PlayerScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+    // 1. Configure ExoPlayer for Debrid/HLS Streaming
+    val exoPlayer = remember {
+        // Allow cross-protocol redirects (HTTP -> HTTPS) which Debrid services often use
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(10_000)
+            .setReadTimeoutMs(10_000)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(httpDataSourceFactory)
+
+        // Optimize buffer for streaming large files
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_MAX_BUFFER_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_MS,
+                DefaultLoadControl.DEFAULT_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS
+            )
+            .build()
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
+            .build()
+    }
 
     // Intercept system back gestures to stop playback and end the session before navigating back
     BackHandler {
         viewModel.stop()
         onNavigateBack?.invoke()
+    }
+
+    // 2. Lifecycle Awareness: Pause player when app goes to background
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> {
+                    exoPlayer.pause()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     // Ensures session is stopped when the composable leaves the Composition hierarchy
@@ -65,6 +113,13 @@ fun PlayerScreen(
             DisposableEffect(coordinatorState.stream.id) {
                 val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
                 exoPlayer.setMediaItem(mediaItem)
+                
+                // 3. Resume Position: Seek to saved progress before preparing
+                val resumeMs = coordinatorState.request.resumePositionMs
+                if (resumeMs != null && resumeMs > 0L) {
+                    exoPlayer.seekTo(resumeMs)
+                }
+                
                 exoPlayer.prepare()
                 exoPlayer.playWhenReady = true
                 onDispose { }
@@ -148,6 +203,8 @@ private fun PlayerSurface(exoPlayer: ExoPlayer) {
             PlayerView(context).apply {
                 player = exoPlayer
                 useController = true
+                // 4. Keep Screen On: Prevent device from sleeping during playback
+                keepScreenOn = true 
             }
         }
     )
