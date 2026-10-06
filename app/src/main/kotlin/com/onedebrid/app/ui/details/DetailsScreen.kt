@@ -35,7 +35,8 @@ import com.onedebrid.app.domain.model.StreamCandidate
 @Composable
 fun DetailsScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToPlayer: (MediaType, String, String?, StreamCandidate) -> Unit,
+    // Added Long? for resumeMs
+    onNavigateToPlayer: (MediaType, String, String?, Long?, StreamCandidate) -> Unit,
     viewModel: DetailsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -132,12 +133,14 @@ fun DetailsScreen(
                                                     onNavigateToPlayer(
                                                         viewModel.mediaType,
                                                         viewModel.mediaId,
-                                                        null,
+                                                        null, // episodeId (null for movies)
+                                                        viewModel.initialResumePositionMs,
                                                         candidate
                                                     )
                                                 }
                                             ) {
-                                                Text("Play")
+                                                // Dynamically change button text if progress exists
+                                                Text(if (viewModel.initialResumePositionMs != null) "Resume" else "Play")
                                             }
                                         }
                                     }

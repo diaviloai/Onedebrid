@@ -1,5 +1,6 @@
 package com.onedebrid.app.ui.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -11,21 +12,36 @@ import com.onedebrid.app.ui.home.HomeScreen
 import com.onedebrid.app.ui.player.PlayerScreen
 import com.onedebrid.app.ui.search.SearchScreen
 import com.onedebrid.app.ui.settings.SettingsScreen
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+// Data class to safely pass arguments to the Player route
+data class PlayerNavArgs(
+    val mediaId: String,
+    val episodeId: String? = null,
+    val resumeMs: Long? = null,
+    val preferredSourceJson: String? = null
+)
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Search : Screen("search")
     object Settings : Screen("settings")
-    object Details : Screen("details/{mediaId}") {
-        fun createRoute(mediaId: String): String {
-            return "details/$mediaId"
+    
+    // Updated to match DetailsViewModel expectations
+    object Details : Screen("details/{mediaId}?mediaType={mediaType}&resumePositionMs={resumePositionMs}") {
+        fun createRoute(mediaId: String, mediaType: String = "MOVIE", resumePositionMs: Long = -1L): String {
+            return "details/$mediaId?mediaType=$mediaType&resumePositionMs=$resumePositionMs"
         }
     }
-    object Player : Screen("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}") {
+    
+    // Updated to include preferredSource for the PlayerViewModel
+    object Player : Screen("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}&preferredSource={preferredSource}") {
         fun createRoute(args: PlayerNavArgs): String {
-            val ep = args.episodeId ?: ""
+            val ep = args.episodeId ?: "none"
             val pos = args.resumeMs ?: -1L
-            return "player/${args.mediaId}?episodeId=$ep&resumeMs=$pos"
+            val src = args.preferredSourceJson ?: ""
+            return "player/${args.mediaId}?episodeId=$ep&resumeMs=$pos&preferredSource=$src"
         }
     }
 }
@@ -56,18 +72,23 @@ fun NavGraph(navController: NavHostController) {
         composable(
             route = Screen.Details.route,
             arguments = listOf(
-                navArgument("mediaId") { type = NavType.StringType }
+                navArgument("mediaId") { type = NavType.StringType },
+                navArgument("mediaType") { type = NavType.StringType; defaultValue = "MOVIE" },
+                navArgument("resumePositionMs") { type = NavType.LongType; defaultValue = -1L }
             )
         ) {
             DetailsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlayer = { _, mediaId, episodeId, candidate ->
+                onNavigateToPlayer = { _, mediaId, episodeId, resumeMs, candidate ->
+                    // Serialize the selected stream so the Player doesn't have to guess which one to play
+                    val candidateJson = Uri.encode(Json.encodeToString(candidate))
                     navController.navigate(
                         Screen.Player.createRoute(
                             PlayerNavArgs(
                                 mediaId = mediaId,
                                 episodeId = episodeId,
-                                resumeMs = null
+                                resumeMs = resumeMs,
+                                preferredSourceJson = candidateJson
                             )
                         )
                     )
@@ -91,14 +112,9 @@ fun NavGraph(navController: NavHostController) {
             route = Screen.Player.route,
             arguments = listOf(
                 navArgument("mediaId") { type = NavType.StringType },
-                navArgument("episodeId") {
-                    type = NavType.StringType
-                    nullable = true
-                },
-                navArgument("resumeMs") {
-                    type = NavType.LongType
-                    defaultValue = -1L
-                }
+                navArgument("episodeId") { type = NavType.StringType; defaultValue = "none" },
+                navArgument("resumeMs") { type = NavType.LongType; defaultValue = -1L },
+                navArgument("preferredSource") { type = NavType.StringType; defaultValue = "" }
             )
         ) {
             PlayerScreen(
