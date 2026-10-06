@@ -4,6 +4,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 
 /**
  * Database entity representing a managed offline download.
@@ -46,6 +48,7 @@ import androidx.room.PrimaryKey
         Index("status")
     ]
 )
+@TypeConverters(DownloadConverters::class)
 data class DownloadEntity(
 
     @PrimaryKey
@@ -93,4 +96,12 @@ enum class DownloadStatus {
     COMPLETED,
     FAILED,
     CANCELLED
+}
+
+class DownloadConverters {
+    @TypeConverter
+    fun fromDownloadStatus(value: DownloadStatus): String = value.name
+
+    @TypeConverter
+    fun toDownloadStatus(value: String): DownloadStatus = DownloadStatus.valueOf(value)
 }

@@ -2,6 +2,8 @@ package com.onedebrid.app.data.local.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import com.onedebrid.app.domain.model.SubtitleFormat
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.PlaybackPreferences
@@ -9,8 +11,11 @@ import com.onedebrid.app.domain.model.SubtitlePreferences
 import com.onedebrid.app.domain.model.SearchPreferences
 import com.onedebrid.app.domain.model.ThemePreferences
 import com.onedebrid.app.domain.model.VideoQuality
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Entity(tableName = "profiles")
+@TypeConverters(ProfileConverters::class)
 data class ProfileEntity(
 
     @PrimaryKey
@@ -94,4 +99,28 @@ data class ProfileEntity(
             providerPriorities = profile.providerPriorities
         )
     }
+}
+
+class ProfileConverters {
+    @TypeConverter
+    fun fromProviderPriorities(value: Map<String, List<String>>): String {
+        return Json.encodeToString(value)
+    }
+
+    @TypeConverter
+    fun toProviderPriorities(value: String): Map<String, List<String>> {
+        return Json.decodeFromString(value)
+    }
+
+    @TypeConverter
+    fun fromVideoQuality(value: VideoQuality): String = value.name
+
+    @TypeConverter
+    fun toVideoQuality(value: String): VideoQuality = VideoQuality.valueOf(value)
+
+    @TypeConverter
+    fun fromSubtitleFormat(value: SubtitleFormat?): String? = value?.name
+
+    @TypeConverter
+    fun toSubtitleFormat(value: String?): SubtitleFormat? = value?.let { SubtitleFormat.valueOf(it) }
 }
