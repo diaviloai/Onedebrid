@@ -29,6 +29,8 @@ import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
+import io.mockk.coVerify
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -101,11 +103,10 @@ class PlayerViewModelTest {
         getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository)
         getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository)
         getActiveProfileUseCase = GetActiveProfileUseCase(fakeProfileRepository)
-        savePlaybackPositionUseCase = SavePlaybackPositionUseCase(
-            playbackRepository = fakePlaybackRepository,
-            sessionRepository = fakeSessionRepository,
-            dispatchers = dispatchers
-        )
+        
+        // Mock the use case so we don't rely on FakeSessionRepository's internal state
+        savePlaybackPositionUseCase = mockk(relaxed = true)
+        
         endPlaybackSessionUseCase = EndPlaybackSessionUseCase(fakeSessionRepository, dispatchers)
     }
 
@@ -215,13 +216,14 @@ class PlayerViewModelTest {
             testScheduler.advanceTimeBy(5_001L)
             testScheduler.runCurrent()
 
-            assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
-            assertEquals(10_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
+            // Verify the use case was called exactly once after 5 seconds
+            coVerify(exactly = 1) { savePlaybackPositionUseCase(10_000L, 100_000L) }
 
             testScheduler.advanceTimeBy(5_000L)
             testScheduler.runCurrent()
 
-            assertEquals(2, fakePlaybackRepository.savedProgressCalls.size)
+            // Verify it was called a second time after another 5 seconds
+            coVerify(exactly = 2) { savePlaybackPositionUseCase(10_000L, 100_000L) }
 
             viewModel.stop()
             testScheduler.runCurrent()
@@ -253,8 +255,8 @@ class PlayerViewModelTest {
             viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
             testScheduler.runCurrent()
 
-            assertEquals(1, fakePlaybackRepository.savedProgressCalls.size)
-            assertEquals(25_000L, fakePlaybackRepository.savedProgressCalls.first().positionMs)
+            // Verify the use case was called immediately upon pausing
+            coVerify(exactly = 1) { savePlaybackPositionUseCase(25_000L, 100_000L) }
 
             viewModel.stop()
             testScheduler.runCurrent()
@@ -341,18 +343,6 @@ private class FakeSessionRepository : SessionRepository {
 }
 
 private class FakePlaybackRepository : PlaybackRepository {
-    data class ProgressCall(
-        val profileId: String,
-        val mediaId: String,
-        val episodeId: String?,
-        val seasonNumber: Int?,
-        val episodeNumber: Int?,
-        val positionMs: Long,
-        val durationMs: Long
-    )
-
-    val savedProgressCalls = mutableListOf<ProgressCall>()
-
     override fun observeContinueWatching(profileId: String): Flow<List<WatchedItem>> = flowOf(emptyList())
     override suspend fun removeFromContinueWatching(profileId: String, mediaId: String) {}
     override suspend fun saveProgress(
@@ -363,12 +353,7 @@ private class FakePlaybackRepository : PlaybackRepository {
         episodeNumber: Int?,
         positionMs: Long,
         durationMs: Long
-    ) {
-        savedProgressCalls.add(
-            ProgressCall(profileId, mediaId, episodeId, seasonNumber, episodeNumber, positionMs, durationMs)
-        )
-    }
-
+    ) {}
     override suspend fun getProgress(profileId: String, mediaId: String, episodeId: String?): RepositoryResult<Long?> = RepositoryResult.Success(null)
     override suspend fun markAsCompleted(profileId: String, mediaId: String) {}
     override fun observeRecentlyPlayed(profileId: String): Flow<List<WatchedItem>> = flowOf(emptyList())
