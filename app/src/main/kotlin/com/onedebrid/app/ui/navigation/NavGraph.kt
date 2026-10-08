@@ -32,7 +32,8 @@ sealed class Screen(val route: String) {
         fun createRoute(args: PlayerNavArgs): String {
             val ep = args.episodeId ?: "none"
             val pos = args.resumeMs ?: -1L
-            val src = args.preferredSourceJson ?: ""
+            // JSON-encoding is handled here at the routing layer, keeping the UI layer clean
+            val src = args.preferredSource?.let { Uri.encode(Json.encodeToString(it)) } ?: ""
             return "player/${args.mediaId}?episodeId=$ep&resumeMs=$pos&preferredSource=$src"
         }
     }
@@ -72,15 +73,13 @@ fun NavGraph(navController: NavHostController) {
             DetailsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlayer = { _, mediaId, episodeId, resumeMs, candidate ->
-                    // Serialize the selected stream so the Player doesn't have to guess which one to play
-                    val candidateJson = Uri.encode(Json.encodeToString(candidate))
                     navController.navigate(
                         Screen.Player.createRoute(
                             PlayerNavArgs(
                                 mediaId = mediaId,
                                 episodeId = episodeId,
                                 resumeMs = resumeMs,
-                                preferredSourceJson = candidateJson
+                                preferredSource = candidate // Passing the domain object directly
                             )
                         )
                     )
