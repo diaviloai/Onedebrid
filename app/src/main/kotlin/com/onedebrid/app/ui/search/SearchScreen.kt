@@ -6,11 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -31,10 +36,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import com.onedebrid.app.R
 import com.onedebrid.app.coordinator.SearchState
 import com.onedebrid.app.domain.error.AppError
@@ -216,9 +224,36 @@ private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Uni
             .fillMaxWidth()
             .clickable { onClick(result) }
             .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // TMDB Poster Image
+        if (media.posterPath != null) {
+            AsyncImage(
+                model = "https://image.tmdb.org/t/p/w500${media.posterPath}",
+                contentDescription = media.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(width = 60.dp, height = 90.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+        } else {
+            // Placeholder if no poster exists
+            Box(
+                modifier = Modifier
+                    .size(width = 60.dp, height = 90.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+        }
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = media.title,
@@ -232,6 +267,7 @@ private fun SearchResultRow(result: SearchResult, onClick: (SearchResult) -> Uni
                 }
             }
             if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
