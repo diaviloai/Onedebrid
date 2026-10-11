@@ -19,12 +19,6 @@ import com.onedebrid.app.domain.model.SearchResult
 import com.onedebrid.app.provider.search.SearchFilters
 import com.onedebrid.app.provider.search.SearchProvider
 
-/**
- * Backed by stub providers until real provider implementations exist.
- * All calls will return RepositoryResult.Failure(AppError.AllProvidersUnavailable)
- * until StubDebridProvider and StubMetadataProvider are replaced.
- * This is intentional — accidental runtime calls fail visibly.
- */
 @Singleton
 class MediaRepositoryImpl @Inject constructor(
     private val metadataProvider: MetadataProvider,
@@ -34,18 +28,6 @@ class MediaRepositoryImpl @Inject constructor(
     private val dispatchers: CoroutineDispatchers
 ) : MediaRepository {
 
-    /**
-     * Cache-first (Session 25). Checks MediaCache before hitting the
-     * network; writes through to MediaCache on a successful fetch. A cache
-     * hit skips metadataProvider entirely, so this also works while
-     * MetadataProvider is still StubMetadataProvider — as long as a Media
-     * for this mediaId was cached previously (e.g. by a future real
-     * provider, or a test seeding the cache directly), getMediaDetails()
-     * will succeed without needing a real network call. On a cache miss
-     * today, this still resolves to AppError.AllProvidersUnavailable via
-     * the stub, exactly as before this change — the cache does not alter
-     * failure behavior, only skips redundant work on a hit.
-     */
     override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
         withContext(dispatchers.io) {
             mediaCache.getMedia(mediaId)?.let { cached ->
@@ -61,9 +43,6 @@ class MediaRepositoryImpl @Inject constructor(
             }
         }
 
-    /**
-     * Cache-first, same pattern as getMediaDetails() above.
-     */
     override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> =
         withContext(dispatchers.io) {
             mediaCache.getEpisodes(mediaId)?.let { cached ->
@@ -79,17 +58,6 @@ class MediaRepositoryImpl @Inject constructor(
             }
         }
 
-    /**
-     * Implemented via getEpisodes() (cache-first) plus an in-memory filter
-     * to the matching episodeId. See the doc comment on this method in
-     * MediaRepository.kt for why there is no dedicated per-episode cache
-     * entry or provider call as of Session 27.
-     *
-     * Session 27 fix note: this method was originally pasted in the wrong
-     * place — after the class's closing brace instead of before it — which
-     * broke the build (see currentsprint.md Session 27 notes). This is the
-     * corrected placement, inside the class body, before resolveStream().
-     */
     override suspend fun getEpisodeById(
         mediaId: String,
         episodeId: String
@@ -112,48 +80,19 @@ class MediaRepositoryImpl @Inject constructor(
 
     override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
         withContext(dispatchers.io) {
-            val hash = candidate.hash
-                ?: return@withContext RepositoryResult.Failure(
-                    AppError.NoCachedStreamAvailable
-                )
-            debridProvider.resolveStream(hash).toRepositoryResult()
+            debridProvider.resolveStream(candidate).toRepositoryResult()
         }
 
     override suspend fun checkCacheStatus(
         candidates: List<StreamCandidate>
     ): RepositoryResult<Map<String, Boolean>> =
         withContext(dispatchers.io) {
-            // Candidates without a hash cannot be cache-checked.
-            // They are excluded from the batch and implicitly treated as
-            // not cached — the map will simply not contain an entry for them.
-            val hashes = candidates.mapNotNull { it.hash }
-            if (hashes.isEmpty()) {
+            if (candidates.isEmpty()) {
                 return@withContext RepositoryResult.Success(emptyMap())
             }
-            debridProvider.checkCache(hashes).toRepositoryResult()
+            debridProvider.checkCacheStatus(candidates).toRepositoryResult()
         }
 
-    /**
-     * Session (real MetadataProvider): now delegates to
-     * metadataProvider.searchMedia() (TMDB) instead of
-     * searchProvider.search() (Torrentio). Torrentio's search() always
-     * returns ProviderError.NotFound — it has no free-text capability at
-     * all, see TorrentioSearchProvider's doc comment — so this method
-     * never actually worked until now.
-     *
-     * Maps each Media returned by TMDB into a SearchResult with an empty
-     * candidates list. This is deliberate, not a placeholder: stream
-     * candidates are resolved later, on demand, when the user taps into
-     * Details/Player (which already calls
-     * searchStreamsByMedia()/searchByMedia() via
-     * ResolvePlaybackUseCase's Smart Defaults fallback) — not eagerly
-     * for every search result. Eager resolution was considered and
-     * explicitly rejected this session: it would mean ~2 extra network
-     * calls per result against Torrentio (documented as periodically
-     * unreliable) before the Search screen could render at all, which
-     * conflicts with UI/UX Design v0.1's "Zero-Click to Content" and
-     * "Non-Blocking UI" principles.
-     */
     override suspend fun search(
         query: String,
         profileId: String
@@ -177,17 +116,6 @@ class MediaRepositoryImpl @Inject constructor(
                 }
         }
 
-    /**
-     * Session 29: pass-through to SearchProvider.searchByMedia(). See
-     * MediaRepository.kt's doc comment on this method for why it exists
-     * alongside search() rather than sharing its implementation.
-     *
-     * episode?.let carries season/episode into SearchFilters — this is
-     * the one translation this method is responsible for, since
-     * SearchProvider's contract takes filters rather than an Episode
-     * directly (Episode is a domain model with more fields than a
-     * provider needs; SearchFilters is intentionally minimal).
-     */
     override suspend fun searchStreamsByMedia(
         media: Media,
         episode: Episode?
@@ -199,8 +127,6 @@ class MediaRepositoryImpl @Inject constructor(
             )
             searchProvider.searchByMedia(media, filters).toRepositoryResult()
         }
-
-    // --- ProviderResult → RepositoryResult translation ---
 
     private fun <T> ProviderResult<T>.toRepositoryResult(): RepositoryResult<T> =
         when (this) {

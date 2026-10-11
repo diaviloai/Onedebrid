@@ -30,7 +30,7 @@ data class SearchResult(
  * confirms it is cached and resolves it to a direct URL.
  *
  * title: The raw torrent or release title as returned by the search provider.
- * hash: The torrent info hash used for debrid cache checking.
+ * hash: The torrent info hash used for debrid cache checking. Must be non-null.
  * magnetUrl: The full magnet link, used if hash alone is insufficient.
  * sizeBytes: File size in bytes if available from the search provider.
  * seeders: Seeder count where available. Not meaningful after debrid resolution.
@@ -42,16 +42,14 @@ data class SearchResult(
  * carry a domain object directly — only primitives/strings — so a picked
  * candidate is JSON-encoded via kotlinx.serialization and carried as an
  * optional nav-arg string on Route.Player, then decoded back into a
- * StreamCandidate by PlayerViewModel. VideoQuality (the one non-primitive
- * field here) was made @Serializable for the same reason — see
- * StreamSource.kt.
+ * StreamCandidate by PlayerViewModel.
  */
 @Serializable
 data class StreamCandidate(
     val title: String,
-    val hash: String? = null,
+    val hash: String,
     val magnetUrl: String? = null,
     val sizeBytes: Long? = null,
-    val seeders: Int? = null,
+    val seeders: Int = 0,
     val quality: VideoQuality = VideoQuality.UNKNOWN
 )

@@ -5,6 +5,7 @@ import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.error.ProviderError
 import com.onedebrid.app.domain.error.ProviderResult
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.provider.debrid.DebridProvider
 import kotlinx.coroutines.withContext
@@ -12,7 +13,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Resolves a playable [StreamSource] for a given media hash.
+ * Resolves a playable [StreamSource] for a given [StreamCandidate].
  *
  * Iterates through configured [DebridProvider]s. If a provider fails to
  * resolve a stream or returns an uncached link, the use case gracefully
@@ -25,7 +26,7 @@ class ResolveStreamUseCase @Inject constructor(
     private val dispatchers: CoroutineDispatchers
 ) {
 
-    suspend operator fun invoke(hash: String): RepositoryResult<StreamSource> =
+    suspend operator fun invoke(candidate: StreamCandidate): RepositoryResult<StreamSource> =
         withContext(dispatchers.io) {
             if (providers.isEmpty()) {
                 return@withContext RepositoryResult.Failure(AppError.AllProvidersUnavailable)
@@ -34,7 +35,7 @@ class ResolveStreamUseCase @Inject constructor(
             var lastError: AppError = AppError.AllProvidersUnavailable
 
             for (provider in providers) {
-                when (val result = provider.resolveStream(hash)) {
+                when (val result = provider.resolveStream(candidate)) {
                     is ProviderResult.Success -> {
                         return@withContext RepositoryResult.Success(result.data)
                     }
