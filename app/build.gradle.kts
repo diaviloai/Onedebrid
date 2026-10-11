@@ -114,6 +114,10 @@ dependencies {
 
     // KotlinX Serialization
     implementation(libs.kotlinx.serialization.json)
+    
+    // Image Loading (Coil)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     // Testing
     testImplementation(libs.junit)
