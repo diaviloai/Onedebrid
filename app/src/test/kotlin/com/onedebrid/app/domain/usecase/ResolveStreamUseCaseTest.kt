@@ -5,9 +5,9 @@ import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.error.ProviderError
 import com.onedebrid.app.domain.error.ProviderResult
+import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.VideoQuality
-import com.onedebrid.app.provider.debrid.AccountInfo
 import com.onedebrid.app.provider.debrid.DebridProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,11 +34,17 @@ class ResolveStreamUseCaseTest {
         quality = VideoQuality.HD_1080
     )
 
+    private val dummyCandidate = StreamCandidate(
+        title = "Test Release",
+        hash = "test-hash",
+        quality = VideoQuality.HD_1080
+    )
+
     @Test
     fun `when no providers configured returns AllProvidersUnavailable`() = runTest {
         val useCase = ResolveStreamUseCase(emptySet(), dispatchers)
 
-        val result = useCase("test-hash")
+        val result = useCase(dummyCandidate)
 
         assertTrue(result is RepositoryResult.Failure)
         assertEquals(AppError.AllProvidersUnavailable, (result as RepositoryResult.Failure).error)
@@ -53,7 +59,7 @@ class ResolveStreamUseCaseTest {
         )
         val useCase = ResolveStreamUseCase(setOf(provider), dispatchers)
 
-        val result = useCase("test-hash")
+        val result = useCase(dummyCandidate)
 
         assertTrue(result is RepositoryResult.Success)
         assertEquals(mockStream, (result as RepositoryResult.Success).data)
@@ -73,7 +79,7 @@ class ResolveStreamUseCaseTest {
         )
         val useCase = ResolveStreamUseCase(setOf(provider1, provider2), dispatchers)
 
-        val result = useCase("test-hash")
+        val result = useCase(dummyCandidate)
 
         assertTrue(result is RepositoryResult.Success)
         assertEquals(mockStream, (result as RepositoryResult.Success).data)
@@ -93,7 +99,7 @@ class ResolveStreamUseCaseTest {
         )
         val useCase = ResolveStreamUseCase(setOf(provider1, provider2), dispatchers)
 
-        val result = useCase("test-hash")
+        val result = useCase(dummyCandidate)
 
         assertTrue(result is RepositoryResult.Failure)
         assertEquals(AppError.StreamResolutionFailed, (result as RepositoryResult.Failure).error)
@@ -104,12 +110,10 @@ class ResolveStreamUseCaseTest {
         override val displayName: String,
         private val result: ProviderResult<StreamSource>
     ) : DebridProvider {
-        override suspend fun verifyAccount(): ProviderResult<AccountInfo> =
-            ProviderResult.Success(AccountInfo("user", true))
+        
+        override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): ProviderResult<Map<String, Boolean>> =
+            ProviderResult.Success(candidates.associate { it.hash to true })
 
-        override suspend fun checkCache(hashes: List<String>): ProviderResult<Map<String, Boolean>> =
-            ProviderResult.Success(hashes.associateWith { true })
-
-        override suspend fun resolveStream(hash: String): ProviderResult<StreamSource> = result
+        override suspend fun resolveStream(candidate: StreamCandidate): ProviderResult<StreamSource> = result
     }
 }
