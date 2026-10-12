@@ -1,9 +1,6 @@
 package com.onedebrid.app.ui.home
 
-import com.onedebrid.app.data.repository.PlaybackRepository
-import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
-import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
@@ -14,11 +11,10 @@ import com.onedebrid.app.usecase.GetContinueWatchingUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RemoveFromContinueWatchingUseCase
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -36,12 +32,14 @@ import org.junit.Test
 class HomeViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
     private lateinit var continueWatchingFlow: MutableSharedFlow<List<WatchedItem>>
-    private lateinit var fakePlaybackRepository: FakePlaybackRepository
+
+    private lateinit var getActiveProfileUseCase: GetActiveProfileUseCase
+    private lateinit var getContinueWatchingUseCase: GetContinueWatchingUseCase
     private lateinit var getMediaByIdUseCase: GetMediaByIdUseCase
+    private lateinit var removeFromContinueWatchingUseCase: RemoveFromContinueWatchingUseCase
 
     private lateinit var homeViewModel: HomeViewModel
 
@@ -51,16 +49,18 @@ class HomeViewModelTest {
 
         activeProfileFlow = MutableSharedFlow()
         continueWatchingFlow = MutableSharedFlow()
-        fakePlaybackRepository = FakePlaybackRepository(continueWatchingFlow)
 
-        val profileRepository = FakeProfileRepository(activeProfileFlow)
-        val getActiveProfileUseCase = GetActiveProfileUseCase(profileRepository)
-        val getContinueWatchingUseCase = GetContinueWatchingUseCase(fakePlaybackRepository)
-        val removeFromContinueWatchingUseCase = RemoveFromContinueWatchingUseCase(fakePlaybackRepository, dispatchers)
+        // Mock the UseCases directly instead of building giant Fake Repositories
+        getActiveProfileUseCase = mockk()
+        every { getActiveProfileUseCase() } returns activeProfileFlow
 
-        // Mock the new use case
+        getContinueWatchingUseCase = mockk()
+        every { getContinueWatchingUseCase(any()) } returns continueWatchingFlow
+
         getMediaByIdUseCase = mockk()
         coEvery { getMediaByIdUseCase(any()) } returns RepositoryResult.Failure(AppError.Unknown("Not found"))
+
+        removeFromContinueWatchingUseCase = mockk(relaxed = true)
 
         homeViewModel = HomeViewModel(
             getActiveProfileUseCase = getActiveProfileUseCase,
@@ -133,54 +133,4 @@ class HomeViewModelTest {
         assertEquals("e1", navArgs.episodeId)
         assertEquals(5000L, navArgs.resumeMs)
     }
-
-    private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : CoroutineDispatchers {
-        override val main: CoroutineDispatcher = dispatcher
-        override val io: CoroutineDispatcher = dispatcher
-        override val default: CoroutineDispatcher = dispatcher
-    }
-
-    private class FakeProfileRepository(
-        private val activeProfileFlow: Flow<UserProfile>
-    ) : ProfileRepository {
-        override fun observeProfiles(): Flow<List<UserProfile>> = MutableSharedFlow()
-        override fun observeActiveProfile(): Flow<UserProfile> = activeProfileFlow
-        override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-        override suspend fun getActiveProfile(): RepositoryResult<UserProfile> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-        override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> =
-            RepositoryResult.Success(profile)
-        override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> =
-            RepositoryResult.Success(profile)
-        override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> =
-            RepositoryResult.Success(Unit)
-        override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
-            RepositoryResult.Success(Unit)
-    }
-
-    private class FakePlaybackRepository(
-        private val continueWatchingFlow: Flow<List<WatchedItem>>
-    ) : PlaybackRepository {
-        val removedItems = mutableListOf<Pair<String, String>>()
-
-        override fun observeContinueWatching(profileId: String): Flow<List<WatchedItem>> = continueWatchingFlow
-
-        override suspend fun removeFromContinueWatching(profileId: String, mediaId: String) {
-            removedItems.add(profileId to mediaId)
-        }
-
-        override suspend fun saveProgress(
-            profileId: String,
-            mediaId: String,
-            episodeId: String?,
-            seasonNumber: Int?,
-            episodeNumber: Int?,
-            positionMs: Long,
-            durationMs: Long
-        ) {}
-
-        override suspend fun getProgress(
-            profileId: String,
-            mediaId: String,
-            episode
+}
