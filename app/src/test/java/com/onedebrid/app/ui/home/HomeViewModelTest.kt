@@ -5,11 +5,16 @@ import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
+import com.onedebrid.app.domain.model.Media
+import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetContinueWatchingUseCase
+import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.RemoveFromContinueWatchingUseCase
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,6 +41,7 @@ class HomeViewModelTest {
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
     private lateinit var continueWatchingFlow: MutableSharedFlow<List<WatchedItem>>
     private lateinit var fakePlaybackRepository: FakePlaybackRepository
+    private lateinit var getMediaByIdUseCase: GetMediaByIdUseCase
 
     private lateinit var homeViewModel: HomeViewModel
 
@@ -52,9 +58,14 @@ class HomeViewModelTest {
         val getContinueWatchingUseCase = GetContinueWatchingUseCase(fakePlaybackRepository)
         val removeFromContinueWatchingUseCase = RemoveFromContinueWatchingUseCase(fakePlaybackRepository, dispatchers)
 
+        // Mock the new use case
+        getMediaByIdUseCase = mockk()
+        coEvery { getMediaByIdUseCase(any()) } returns RepositoryResult.Failure(AppError.Unknown("Not found"))
+
         homeViewModel = HomeViewModel(
             getActiveProfileUseCase = getActiveProfileUseCase,
             getContinueWatchingUseCase = getContinueWatchingUseCase,
+            getMediaByIdUseCase = getMediaByIdUseCase,
             removeFromContinueWatchingUseCase = removeFromContinueWatchingUseCase
         )
     }
@@ -67,29 +78,36 @@ class HomeViewModelTest {
     @Test
     fun `observes continue watching list on active profile emission`() = runTest(testDispatcher) {
         val profile = UserProfile(id = "p1", name = "Test Profile")
-        val items = listOf(
-            WatchedItem(
-                mediaId = "m1",
-                episodeId = null,
-                seasonNumber = null,
-                episodeNumber = null,
-                positionMs = 1000L,
-                durationMs = 120000L,
-                lastInteractedAt = 1000000L
-            )
+        val item = WatchedItem(
+            mediaId = "m1",
+            episodeId = null,
+            seasonNumber = null,
+            episodeNumber = null,
+            positionMs = 1000L,
+            durationMs = 120000L,
+            lastInteractedAt = 1000000L
         )
+        val media = Media(id = "m1", title = "Test Movie", type = MediaType.MOVIE)
+
+        // Tell the mock to return our fake Media when asked for "m1"
+        coEvery { getMediaByIdUseCase("m1") } returns RepositoryResult.Success(media)
 
         backgroundScope.launch { homeViewModel.uiState.collect {} }
 
         activeProfileFlow.emit(profile)
         testScheduler.advanceUntilIdle()
 
-        continueWatchingFlow.emit(items)
+        continueWatchingFlow.emit(listOf(item))
         testScheduler.advanceUntilIdle()
 
         val state = homeViewModel.uiState.value
         assertFalse(state.isLoading)
-        assertEquals(items, state.continueWatching)
+        assertEquals(1, state.continueWatching.size)
+        
+        // Assert that the UI item correctly pairs the WatchedItem with its Media
+        val uiItem = state.continueWatching.first()
+        assertEquals(item, uiItem.watchedItem)
+        assertEquals(media, uiItem.media)
     }
 
     @Test
@@ -165,21 +183,4 @@ class HomeViewModelTest {
         override suspend fun getProgress(
             profileId: String,
             mediaId: String,
-            episodeId: String?
-        ): RepositoryResult<Long?> = RepositoryResult.Success(null)
-
-        override suspend fun markAsCompleted(profileId: String, mediaId: String) {}
-
-        override fun observeRecentlyPlayed(profileId: String): Flow<List<WatchedItem>> = MutableSharedFlow()
-
-        override suspend fun recordPlayed(
-            profileId: String,
-            mediaId: String,
-            episodeId: String?,
-            seasonNumber: Int?,
-            episodeNumber: Int?
-        ) {}
-
-        override suspend fun clearHistory(profileId: String) {}
-    }
-}
+            episode
