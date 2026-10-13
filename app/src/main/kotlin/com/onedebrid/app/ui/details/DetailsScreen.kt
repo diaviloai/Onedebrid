@@ -1,16 +1,20 @@
 package com.onedebrid.app.ui.details
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,7 +39,6 @@ import com.onedebrid.app.domain.model.StreamCandidate
 @Composable
 fun DetailsScreen(
     onNavigateBack: () -> Unit,
-    // Added Long? for resumeMs
     onNavigateToPlayer: (MediaType, String, String?, Long?, StreamCandidate) -> Unit,
     viewModel: DetailsViewModel = hiltViewModel()
 ) {
@@ -113,6 +116,8 @@ fun DetailsScreen(
                         } else {
                             LazyColumn {
                                 itemsIndexed(state.streams) { index, candidate ->
+                                    val isDownloading = state.downloadingHashes.contains(candidate.hash)
+                                    
                                     Card(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -128,19 +133,44 @@ fun DetailsScreen(
                                                 style = MaterialTheme.typography.bodySmall
                                             )
                                             Spacer(modifier = Modifier.height(8.dp))
-                                            Button(
-                                                onClick = {
-                                                    onNavigateToPlayer(
-                                                        viewModel.mediaType,
-                                                        viewModel.mediaId,
-                                                        null, // episodeId (null for movies)
-                                                        viewModel.initialResumePositionMs,
-                                                        candidate
-                                                    )
-                                                }
+                                            
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                // Dynamically change button text if progress exists
-                                                Text(if (viewModel.initialResumePositionMs != null) "Resume" else "Play")
+                                                Button(
+                                                    onClick = {
+                                                        onNavigateToPlayer(
+                                                            viewModel.mediaType,
+                                                            viewModel.mediaId,
+                                                            null, // episodeId (null for movies)
+                                                            viewModel.initialResumePositionMs,
+                                                            candidate
+                                                        )
+                                                    }
+                                                ) {
+                                                    Text(if (viewModel.initialResumePositionMs != null) "Resume" else "Play")
+                                                }
+
+                                                // Download Button
+                                                IconButton(
+                                                    onClick = { viewModel.downloadStream(candidate) },
+                                                    enabled = !isDownloading
+                                                ) {
+                                                    if (isDownloading) {
+                                                        CircularProgressIndicator(
+                                                            modifier = Modifier.size(24.dp),
+                                                            strokeWidth = 2.dp
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Download,
+                                                            contentDescription = "Download",
+                                                            tint = MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
                                     }
