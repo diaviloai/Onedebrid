@@ -10,27 +10,28 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import javax.inject.Singleton
+import dagger.multibindings.IntoSet
 
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class ProviderModule {
 
+    // Binds RealDebridProvider into the Set<DebridProvider> used by ResolveStreamUseCase
     @Binds
-    @Singleton
+    @IntoSet
+    abstract fun bindRealDebridProvider(
+        realDebridProvider: RealDebridProvider
+    ): DebridProvider
+
+    // Binds TMDB as the official MetadataProvider for the app
+    @Binds
     abstract fun bindMetadataProvider(
-        impl: TmdbMetadataProvider
+        tmdbMetadataProvider: TmdbMetadataProvider
     ): MetadataProvider
 
+    // Binds Torrentio as the official SearchProvider for the app
     @Binds
-    @Singleton
     abstract fun bindSearchProvider(
-        impl: TorrentioSearchProvider
+        torrentioSearchProvider: TorrentioSearchProvider
     ): SearchProvider
-
-    @Binds
-    @Singleton
-    abstract fun bindDebridProvider(
-        impl: RealDebridProvider
-    ): DebridProvider
 }
