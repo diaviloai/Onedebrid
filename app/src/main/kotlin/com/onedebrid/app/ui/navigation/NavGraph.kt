@@ -16,30 +16,26 @@ import com.onedebrid.app.ui.settings.SettingsScreen
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-data class PlayerNavArgs(
-    val mediaId: String,
-    val episodeId: String? = null,
-    val resumeMs: Long? = null,
-    val preferredSourceJson: String? = null
-)
-
 sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Search : Screen("search")
     object Settings : Screen("settings")
     object Downloads : Screen("downloads")
     
+    // Updated to match DetailsViewModel expectations
     object Details : Screen("details/{mediaId}?mediaType={mediaType}&resumePositionMs={resumePositionMs}") {
         fun createRoute(mediaId: String, mediaType: String = "MOVIE", resumePositionMs: Long = -1L): String {
             return "details/$mediaId?mediaType=$mediaType&resumePositionMs=$resumePositionMs"
         }
     }
     
+    // Updated to include preferredSource for the PlayerViewModel
     object Player : Screen("player/{mediaId}?episodeId={episodeId}&resumeMs={resumeMs}&preferredSource={preferredSource}") {
         fun createRoute(args: PlayerNavArgs): String {
             val ep = args.episodeId ?: "none"
             val pos = args.resumeMs ?: -1L
-            val src = args.preferredSourceJson ?: ""
+            // JSON-encoding is handled here at the routing layer, keeping the UI layer clean
+            val src = args.preferredSource?.let { Uri.encode(Json.encodeToString(it)) } ?: ""
             return "player/${args.mediaId}?episodeId=$ep&resumeMs=$pos&preferredSource=$src"
         }
     }
@@ -82,14 +78,13 @@ fun NavGraph(navController: NavHostController) {
             DetailsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlayer = { _, mediaId, episodeId, resumeMs, candidate ->
-                    val candidateJson = Uri.encode(Json.encodeToString(candidate))
                     navController.navigate(
                         Screen.Player.createRoute(
                             PlayerNavArgs(
                                 mediaId = mediaId,
                                 episodeId = episodeId,
                                 resumeMs = resumeMs,
-                                preferredSourceJson = candidateJson
+                                preferredSource = candidate // Passing the domain object directly
                             )
                         )
                     )
