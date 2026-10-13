@@ -46,67 +46,30 @@ import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.VideoQuality
 import java.util.UUID
 
-/**
- * The Settings / Profile management screen.
- *
- * Two responsibilities, per Project_Design.md's Profile System and
- * UI_UX_Design.md's "Settings & Profiles" destination:
- *
- * 1. Profile list — switch active profile, create a new one, rename or
- *    delete an existing one.
- * 2. Preference editing for the active profile — all four groups on
- *    UserProfile (playback, subtitles, search, theme). Editing targets the
- *    active profile only; there is no per-profile "select which profile
- *    you're editing" concept separate from switching, since Smart Defaults
- *    (Project_Design.md) always apply to whichever profile is active.
- *
- * State handling: ProfileViewModel.uiState is Loading/Ready, and effects
- * (ProfileCreated/Updated/Deleted/Error) are transient one-offs consumed via
- * LaunchedEffect + effectConsumed(), per the Unidirectional Data Flow /
- * UIEffect pattern in Technical_standards.md.
- *
- * ID generation: CreateProfileUseCase and ProfileRepositoryImpl.createProfile
- * pass UserProfile.id straight through to Room's @PrimaryKey column with no
- * generation step anywhere in that chain (verified by reading
- * ProfileRepositoryImpl.kt and ProfileEntity.kt directly before writing this
- * screen — see the project's "never write against assumed interfaces"
- * principle). This screen is therefore responsible for generating a real ID
- * via UUID.randomUUID() before calling createProfile(); passing an empty or
- * fixed string would either silently misbehave or collide across multiple
- * new-profile creations.
- *
- * Icon usage note: this screen deliberately avoids introducing any new
- * Icons.Filled.* symbol beyond Icons.Filled.Close (already proven to
- * compile via HomeScreen.kt in this same session). Session 22's build
- * failure came from assuming a Material Icons symbol was available without
- * checking the declared dependency; this screen sidesteps that risk
- * entirely by using text buttons/labels instead of icons for all new
- * actions (add/delete/rename/switch).
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
-    viewModel: ProfileViewModel = hiltViewModel()
+    profileViewModel: ProfileViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val effect by viewModel.effect.collectAsState()
+    val uiState by profileViewModel.uiState.collectAsState()
+    val effect by profileViewModel.effect.collectAsState()
+
+    val rdApiKey by settingsViewModel.rdApiKey.collectAsState()
+    val tmdbApiKey by settingsViewModel.tmdbApiKey.collectAsState()
 
     var showCreateDialog by remember { mutableStateOf(false) }
     var renamingProfile by remember { mutableStateOf<UserProfile?>(null) }
     var pendingError by remember { mutableStateOf<AppError?>(null) }
 
-    // Consume one-off effects. Only Error needs UI action here (a dialog);
-    // Created/Updated/Deleted require no explicit feedback beyond the
-    // state list itself updating, since the underlying Flows already push
-    // a fresh Ready state.
     LaunchedEffect(effect) {
         val currentEffect = effect
         if (currentEffect is ProfileEffect.Error) {
             pendingError = currentEffect.error
         }
         if (currentEffect != null) {
-            viewModel.effectConsumed()
+            profileViewModel.effectConsumed()
         }
     }
 
@@ -117,13 +80,25 @@ fun SettingsScreen(
             is ProfileUiState.Loading -> LoadingContent()
             is ProfileUiState.Ready -> {
                 LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                    
+                    item {
+                        ApiKeysSection(
+                            rdApiKey = rdApiKey,
+                            tmdbApiKey = tmdbApiKey,
+                            onRdApiKeyChange = settingsViewModel::updateRdApiKey,
+                            onTmdbApiKeyChange = settingsViewModel::updateTmdbApiKey
+                        )
+                    }
+
+                    item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
                     item {
                         ProfilesSection(
                             profiles = state.profiles,
                             activeProfile = state.activeProfile,
-                            onSwitch = viewModel::switchProfile,
+                            onSwitch = profileViewModel::switchProfile,
                             onRename = { profile -> renamingProfile = profile },
-                            onDelete = { profileId -> viewModel.deleteProfile(profileId) },
+                            onDelete = { profileId -> profileViewModel.deleteProfile(profileId) },
                             onAddProfile = { showCreateDialog = true }
                         )
                     }
@@ -133,7 +108,7 @@ fun SettingsScreen(
                     item {
                         PreferencesSection(
                             activeProfile = state.activeProfile,
-                            onProfileUpdated = viewModel::updateProfile
+                            onProfileUpdated = profileViewModel::updateProfile
                         )
                     }
                 }
@@ -146,7 +121,7 @@ fun SettingsScreen(
             titleRes = R.string.settings_new_profile_title,
             initialName = "",
             onConfirm = { name ->
-                viewModel.createProfile(
+                profileViewModel.createProfile(
                     UserProfile(id = UUID.randomUUID().toString(), name = name)
                 )
                 showCreateDialog = false
@@ -160,7 +135,7 @@ fun SettingsScreen(
             titleRes = R.string.settings_rename_profile_title,
             initialName = profile.name,
             onConfirm = { newName ->
-                viewModel.updateProfile(profile.copy(name = newName))
+                profileViewModel.updateProfile(profile.copy(name = newName))
                 renamingProfile = null
             },
             onDismiss = { renamingProfile = null }
@@ -184,6 +159,40 @@ fun SettingsScreen(
 private fun LoadingContent() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         CircularProgressIndicator()
+    }
+}
+
+// ── API Keys Section ────────────────────────────────────────────────────
+
+@Composable
+private fun ApiKeysSection(
+    rdApiKey: String,
+    tmdbApiKey: String,
+    onRdApiKeyChange: (String) -> Unit,
+    onTmdbApiKeyChange: (String) -> Unit
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        SectionHeader("API Keys")
+
+        OutlinedTextField(
+            value = rdApiKey,
+            onValueChange = onRdApiKeyChange,
+            label = { Text("Real-Debrid API Key") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+        )
+
+        OutlinedTextField(
+            value = tmdbApiKey,
+            onValueChange = onTmdbApiKeyChange,
+            label = { Text("TMDB API Key") },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+        )
     }
 }
 
@@ -366,15 +375,6 @@ private fun SwitchRow(label: String, checked: Boolean, onCheckedChange: (Boolean
     }
 }
 
-/**
- * A single-line free-text field for a BCP-47 language code.
- *
- * A free-text field rather than a fixed dropdown of languages is
- * deliberate: BCP-47 covers a large, open-ended set of codes, and no
- * language list/lookup exists anywhere in the codebase yet to validate or
- * present one. The hint text communicates the expected format. Revisit if
- * a proper language picker becomes worth building later.
- */
 @Composable
 private fun LanguageCodeField(label: String, value: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
@@ -546,20 +546,6 @@ private fun ThemePreferencesSection(
     }
 }
 
-/**
- * User-facing copy for AppError cases relevant to profile operations.
- *
- * Matches SearchScreen's and PlayerScreen's local errorMessage() convention
- * — AppError stays presentation-agnostic (Technical_standards.md).
- * LocalStorageError's cause is deliberately not surfaced (AppError.kt's own
- * doc comment: "Not shown to the user directly"), including the blank-name
- * validation case from CreateProfileUseCase/UpdateProfileUseCase and the
- * "cannot delete active profile" case from DeleteProfileUseCase — both
- * currently arrive as LocalStorageError per the Open TODOs note that
- * AppError has no ValidationError case yet. A generic message is shown
- * either way; this is a known, tracked limitation, not something this
- * screen works around.
- */
 @Composable
 private fun settingsErrorMessage(error: AppError): String = when (error) {
     is AppError.LocalStorageError -> stringResource(R.string.settings_error_generic)

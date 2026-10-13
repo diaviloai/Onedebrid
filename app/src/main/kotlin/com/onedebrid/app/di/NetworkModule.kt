@@ -1,5 +1,6 @@
 package com.onedebrid.app.di
 
+import com.onedebrid.app.data.repository.SettingsRepository
 import com.onedebrid.app.provider.debrid.realdebrid.RealDebridApi
 import com.onedebrid.app.provider.metadata.tmdb.TmdbApi
 import com.onedebrid.app.provider.search.torrentio.TorrentioApi
@@ -7,6 +8,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -50,10 +52,13 @@ object NetworkModule {
     @Provides
     @Singleton
     @TmdbHttpClient
-    fun provideTmdbOkHttpClient(@DefaultHttpClient baseClient: OkHttpClient): OkHttpClient {
+    fun provideTmdbOkHttpClient(
+        @DefaultHttpClient baseClient: OkHttpClient,
+        settingsRepository: SettingsRepository
+    ): OkHttpClient {
         val tmdbInterceptor = Interceptor { chain ->
-            // TODO (Phase 2): Replace with actual TMDB API Key from BuildConfig or Settings
-            val tmdbApiKey = "YOUR_TMDB_API_KEY" 
+            // Read the key synchronously from DataStore
+            val tmdbApiKey = runBlocking { settingsRepository.getTmdbApiKey() }
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $tmdbApiKey")
                 .build()
@@ -67,10 +72,13 @@ object NetworkModule {
     @Provides
     @Singleton
     @RealDebridHttpClient
-    fun provideRealDebridOkHttpClient(@DefaultHttpClient baseClient: OkHttpClient): OkHttpClient {
+    fun provideRealDebridOkHttpClient(
+        @DefaultHttpClient baseClient: OkHttpClient,
+        settingsRepository: SettingsRepository
+    ): OkHttpClient {
         val rdInterceptor = Interceptor { chain ->
-            // TODO (Phase 2): Replace with actual RD API Key from DataStore/SettingsRepository
-            val rdApiKey = "YOUR_RD_API_KEY"
+            // Read the key synchronously from DataStore
+            val rdApiKey = runBlocking { settingsRepository.getRdApiKey() }
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $rdApiKey")
                 .build()
