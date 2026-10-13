@@ -118,6 +118,9 @@ dependencies {
     // Image Loading (Coil)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    
+    // DataStore (Preferences)
+    implementation(libs.androidx.datastore.preferences)
 
     // Testing
     testImplementation(libs.junit)
