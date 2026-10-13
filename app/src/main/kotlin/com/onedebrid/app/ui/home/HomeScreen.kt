@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -57,6 +58,7 @@ fun HomeScreen(
     onNavigateToDetails: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToDownloads: () -> Unit,
     onNavigateToPlayer: (PlayerNavArgs) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
@@ -77,6 +79,12 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = "Search"
+                        )
+                    }
+                    IconButton(onClick = onNavigateToDownloads) {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = "Downloads"
                         )
                     }
                     IconButton(onClick = onNavigateToSettings) {
