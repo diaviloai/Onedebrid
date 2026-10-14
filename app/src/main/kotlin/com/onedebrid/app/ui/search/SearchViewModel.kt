@@ -17,23 +17,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/**
- * ViewModel for the search screen.
- *
- * Coordinates between the SearchCoordinator (which owns execution) and
- * GetSearchHistoryUseCase (which owns history). Exposes a single UiState
- * that carries both independently, because they serve different UI purposes:
- * history is always visible, search state is transient.
- *
- * The active profile is observed to scope history and to supply a profileId
- * to the coordinator. If no profile is active yet, search and history
- * operations are no-ops.
- */
 @OptIn(FlowPreview::class)
 @HiltViewModel
 class SearchViewModel @Inject constructor(
@@ -49,12 +38,9 @@ class SearchViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    // Active profile — collected separately so we can read its ID
-    // synchronously when the user triggers a search or clear.
     private val _activeProfile = MutableStateFlow<UserProfile?>(null)
 
     init {
-        // Track the active profile
         getActiveProfileUseCase()
             .onEach { profile ->
                 _activeProfile.value = profile
@@ -63,7 +49,6 @@ class SearchViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        // Track coordinator state — this drives the search result / loading UI
         searchCoordinator.state
             .onEach { coordinatorState ->
                 _uiState.value = _uiState.value.copy(
@@ -72,7 +57,6 @@ class SearchViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        // Automatic search query debounce flow
         _searchQuery
             .debounce(500L)
             .distinctUntilChanged()
@@ -87,50 +71,34 @@ class SearchViewModel @Inject constructor(
             .launchIn(viewModelScope)
     }
 
-    /**
-     * Update the active search query text field.
-     */
     fun onQueryChanged(newQuery: String) {
         _searchQuery.value = newQuery
     }
 
-    /**
-     * Submit a search query immediately (e.g. from history click or IME search).
-     *
-     * Delegates to the SearchCoordinator, which handles execution,
-     * history persistence, and cancellation of prior searches.
-     * No-op if no profile is active yet.
-     */
     fun search(query: String) {
         _searchQuery.value = query
-        val profileId = _activeProfile.value?.id ?: return
-        searchCoordinator.search(query, profileId)
+        
+        viewModelScope.launch {
+            // If the in-memory profile is null, actively wait and fetch it from the DB
+            val profileId = _activeProfile.value?.id 
+                ?: getActiveProfileUseCase().firstOrNull()?.id 
+                ?: return@launch // If it's STILL null here, the DB is completely empty
+                
+            searchCoordinator.search(query, profileId)
+        }
     }
 
-    /**
-     * Clear the active search query and return to Idle.
-     *
-     * Called when the user clears the search bar or navigates away.
-     */
     fun clearSearch() {
         _searchQuery.value = ""
         searchCoordinator.clear()
     }
 
-    /**
-     * Clear all search history for the active profile.
-     *
-     * Fire-and-forget — history updates will arrive automatically
-     * through the observed Flow.
-     */
     fun clearHistory() {
-        val profileId = _activeProfile.value?.id ?: return
         viewModelScope.launch {
+            val profileId = _activeProfile.value?.id ?: getActiveProfileUseCase().firstOrNull()?.id ?: return@launch
             clearSearchHistoryUseCase(profileId)
         }
     }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
 
     private fun observeHistory(profileId: String) {
         getSearchHistoryUseCase(profileId)
@@ -141,11 +109,6 @@ class SearchViewModel @Inject constructor(
     }
 }
 
-// ── UI State ──────────────────────────────────────────────────────────────────
-
-/**
- * The complete rendering state for the search screen.
- */
 data class SearchUiState(
     val searchState: SearchState = SearchState.Idle,
     val searchHistory: List<String> = emptyList(),
