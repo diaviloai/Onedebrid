@@ -8,7 +8,6 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -57,8 +56,8 @@ object NetworkModule {
         settingsRepository: SettingsRepository
     ): OkHttpClient {
         val tmdbInterceptor = Interceptor { chain ->
-            // Read the key synchronously from DataStore
-            val tmdbApiKey = runBlocking { settingsRepository.getTmdbApiKey() }
+            // Safe synchronous read
+            val tmdbApiKey = settingsRepository.getTmdbApiKeySync()
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $tmdbApiKey")
                 .build()
@@ -77,8 +76,8 @@ object NetworkModule {
         settingsRepository: SettingsRepository
     ): OkHttpClient {
         val rdInterceptor = Interceptor { chain ->
-            // Read the key synchronously from DataStore
-            val rdApiKey = runBlocking { settingsRepository.getRdApiKey() }
+            // Safe synchronous read
+            val rdApiKey = settingsRepository.getRdApiKeySync()
             val request = chain.request().newBuilder()
                 .addHeader("Authorization", "Bearer $rdApiKey")
                 .build()
