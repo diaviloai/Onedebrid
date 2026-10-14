@@ -16,10 +16,16 @@ import dagger.multibindings.IntoSet
 @InstallIn(SingletonComponent::class)
 abstract class ProviderModule {
 
-    // Binds RealDebridProvider into the Set<DebridProvider> used by ResolveStreamUseCase
+    // 1. Binds RealDebridProvider as the single DebridProvider (used by MediaRepositoryImpl)
+    @Binds
+    abstract fun bindPrimaryDebridProvider(
+        realDebridProvider: RealDebridProvider
+    ): DebridProvider
+
+    // 2. Binds RealDebridProvider into the Set<DebridProvider> (used by ResolveStreamUseCase)
     @Binds
     @IntoSet
-    abstract fun bindRealDebridProvider(
+    abstract fun bindRealDebridProviderIntoSet(
         realDebridProvider: RealDebridProvider
     ): DebridProvider
 
