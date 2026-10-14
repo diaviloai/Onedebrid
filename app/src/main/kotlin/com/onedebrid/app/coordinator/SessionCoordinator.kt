@@ -1,13 +1,16 @@
 package com.onedebrid.app.coordinator
 
 import com.onedebrid.app.data.repository.ProfileRepository
+import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SessionRepository
 import com.onedebrid.app.di.ApplicationScope
 import com.onedebrid.app.di.CoroutineDispatchers
+import com.onedebrid.app.domain.model.UserProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -38,6 +41,20 @@ class SessionCoordinator @Inject constructor(
      */
     fun start() {
         scope.launch(dispatchers.default) {
+            
+            // 1. First-Launch Initialization: 
+            // Check if the database is empty. If no active profile exists, create a default one.
+            val activeProfileResult = profileRepository.getActiveProfile()
+            if (activeProfileResult is RepositoryResult.Failure) {
+                val defaultProfile = UserProfile(
+                    id = UUID.randomUUID().toString(),
+                    name = "Default Profile"
+                )
+                profileRepository.createProfile(defaultProfile)
+                profileRepository.setActiveProfile(defaultProfile.id)
+            }
+
+            // 2. Start observing the active profile to keep the session updated
             profileRepository.observeActiveProfile()
                 .filterNotNull()
                 .distinctUntilChanged()
