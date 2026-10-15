@@ -42,8 +42,11 @@ data class RdUnrestrictUrlDto(
     val filename: String,
     val mimeType: String? = null,
     val filesize: Long? = null,
+    // The ORIGINAL link that was sent to Real-Debrid. Not playable.
     val link: String,
-    val host: String? = null
+    val host: String? = null,
+    // The generated direct-download URL. This is what the player must use.
+    val download: String
 )
 
 // Instant availability response: Map<InfoHash, Map<Hoster, List<Map<FileId, FileInfo>>>>
