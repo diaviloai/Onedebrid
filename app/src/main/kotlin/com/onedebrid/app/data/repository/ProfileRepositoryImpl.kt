@@ -79,16 +79,24 @@ class ProfileRepositoryImpl @Inject constructor(
         }
 
     override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> =
-        withContext(dispatchers.io) {
-            runCatching {
-                profileDao.updateProfile(ProfileEntity.fromDomain(profile))
-            }.fold(
-                onSuccess = { RepositoryResult.Success(profile) },
-                onFailure = { cause ->
-                    RepositoryResult.Failure(AppError.LocalStorageError(cause))
-                }
+    withContext(dispatchers.io) {
+        runCatching {
+            val existing = profileDao.getProfileById(profile.id)
+                ?: error("Profile not found: ${profile.id}")
+            profileDao.updateProfile(
+                ProfileEntity.fromDomain(
+                    profile,
+                    isActive = existing.isActive,
+                    createdAt = existing.createdAt
+                )
             )
-        }
+        }.fold(
+            onSuccess = { RepositoryResult.Success(profile) },
+            onFailure = { cause ->
+                RepositoryResult.Failure(AppError.LocalStorageError(cause))
+            }
+        )
+    }
 
     override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
         withContext(dispatchers.io) {
