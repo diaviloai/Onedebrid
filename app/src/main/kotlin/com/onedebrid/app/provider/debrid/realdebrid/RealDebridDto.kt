@@ -50,4 +50,4 @@ data class RdUnrestrictUrlDto(
 )
 
 // Instant availability response: Map<InfoHash, Map<Hoster, List<Map<FileId, FileInfo>>>>
-typealias RdInstantAvailabilityDto = Map<String, Map<String, List<Map<String, RdFileDto>>>>
+typealias RdInstantAvailabilityDto = Map<String, Map<String, List<Map<String, RdFileDto>>>> 
