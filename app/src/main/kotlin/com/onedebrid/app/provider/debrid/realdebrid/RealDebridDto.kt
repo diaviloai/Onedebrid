@@ -1,6 +1,5 @@
 package com.onedebrid.app.provider.debrid.realdebrid
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -42,12 +41,16 @@ data class RdUnrestrictUrlDto(
     val filename: String,
     val mimeType: String? = null,
     val filesize: Long? = null,
-    // The ORIGINAL link that was sent to Real-Debrid. Not playable.
     val link: String,
-    val host: String? = null,
-    // The generated direct-download URL. This is what the player must use.
-    val download: String
+    val host: String? = null
+)
+
+// A separate, relaxed DTO specifically for the instantAvailability endpoint
+@Serializable
+data class RdInstantFileDto(
+    val filename: String? = null,
+    val filesize: Long? = null
 )
 
 // Instant availability response: Map<InfoHash, Map<Hoster, List<Map<FileId, FileInfo>>>>
-typealias RdInstantAvailabilityDto = Map<String, Map<String, List<Map<String, RdFileDto>>>> 
+typealias RdInstantAvailabilityDto = Map<String, Map<String, List<Map<String, RdInstantFileDto>>>>

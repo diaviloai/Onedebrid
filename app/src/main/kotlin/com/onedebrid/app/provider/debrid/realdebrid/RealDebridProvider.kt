@@ -21,21 +21,19 @@ class RealDebridProvider @Inject constructor(
 
     override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): ProviderResult<Map<String, Boolean>> {
         if (candidates.isEmpty()) return emptyMap<String, Boolean>().asSuccess()
-
-        // RD expects hashes separated by slashes: hash1/hash2/hash3
+        
         val hashes = candidates.joinToString("/") { it.hash }
-
+        
         return try {
             val response = api.checkInstantAvailability(hashes)
             val resultMap = mutableMapOf<String, Boolean>()
-
+            
             candidates.forEach { candidate ->
-                // RD returns a map of hashes. If the hash exists and has hosters, it's cached.
                 val hashData = response[candidate.hash.lowercase()]
                 val isCached = hashData?.isNotEmpty() == true
                 resultMap[candidate.hash] = isCached
             }
-
+            
             resultMap.asSuccess()
         } catch (e: HttpException) {
             e.toProviderError().asFailure()
@@ -53,22 +51,27 @@ class RealDebridProvider @Inject constructor(
             val addResponse = api.addMagnet(magnet)
             val torrentId = addResponse.id
 
-            // 2. Get Torrent Info to find files
-            val infoResponse = api.getTorrentInfo(torrentId)
+            // 2. Get Torrent Info
+            var infoResponse = api.getTorrentInfo(torrentId)
+            
+            // 3. Select Files ONLY if Real-Debrid is waiting for us to do so.
+            // If it's already "downloaded", calling selectFiles will crash with a 400 Bad Request!
+            if (infoResponse.status == "waiting_files_selection") {
+                val videoFiles = infoResponse.files.filter { 
+                    it.path.endsWith(".mp4") || it.path.endsWith(".mkv") || it.path.endsWith(".avi") 
+                }
+                
+                val selectedFile = videoFiles.maxByOrNull { it.bytes } 
+                    ?: return ProviderError.NotFound.asFailure()
 
-            // 3. Select Files (Find the largest video file)
-            val videoFiles = infoResponse.files.filter {
-                it.path.endsWith(".mp4") || it.path.endsWith(".mkv") || it.path.endsWith(".avi")
+                api.selectFiles(torrentId, selectedFile.id.toString())
+                
+                // Refresh info to get the generated links
+                infoResponse = api.getTorrentInfo(torrentId)
             }
 
-            val selectedFile = videoFiles.maxByOrNull { it.bytes }
-                ?: return ProviderError.NotFound.asFailure()
-
-            api.selectFiles(torrentId, selectedFile.id.toString())
-
-            // 4. Get the updated info to get the generated link
-            val updatedInfo = api.getTorrentInfo(torrentId)
-            val link = updatedInfo.links.firstOrNull()
+            // 4. Get the generated link
+            val link = infoResponse.links.firstOrNull() 
                 ?: return ProviderError.NotFound.asFailure()
 
             // 5. Unrestrict the link
@@ -76,13 +79,11 @@ class RealDebridProvider @Inject constructor(
 
             StreamSource(
                 id = unrestrictResponse.id,
-                mediaId = "", // This will be populated by the Repository layer
-                // 'download' is the direct streamable URL. 'link' is only the
-                // original restricted link we sent in, and is not playable.
-                url = unrestrictResponse.download,
+                mediaId = "", // Populated by Repository layer
+                url = unrestrictResponse.link,
                 quality = candidate.quality,
-                fileSizeBytes = unrestrictResponse.filesize ?: selectedFile.bytes,
-                fileName = unrestrictResponse.filename ?: selectedFile.path,
+                fileSizeBytes = unrestrictResponse.filesize ?: 0L,
+                fileName = unrestrictResponse.filename ?: "video.mp4",
                 isCached = true
             ).asSuccess()
 
