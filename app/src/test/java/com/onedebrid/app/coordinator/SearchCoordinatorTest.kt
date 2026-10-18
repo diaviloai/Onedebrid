@@ -1,17 +1,18 @@
 package com.onedebrid.app.coordinator
 
 import com.onedebrid.app.data.repository.MediaRepository
+import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SearchRepository
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.SearchResult
-import com.onedebrid.app.domain.model.StreamCandidate
-import com.onedebrid.app.domain.model.StreamSource
+import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.usecase.SearchMediaUseCase
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -30,38 +31,6 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchCoordinatorTest {
-
-    private class FakeMediaRepository : MediaRepository {
-        var searchResult: RepositoryResult<List<SearchResult>> = RepositoryResult.Success(emptyList())
-
-        override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> {
-            return RepositoryResult.Failure(AppError.Unknown("Not found"))
-        }
-
-        override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> {
-            return RepositoryResult.Success(emptyList())
-        }
-
-        override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> {
-            return RepositoryResult.Failure(AppError.Unknown("Not found"))
-        }
-
-        override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> {
-            return searchResult
-        }
-
-        override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
-            return RepositoryResult.Success(emptyList())
-        }
-
-        override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> {
-            return RepositoryResult.Failure(AppError.Unknown("Not found"))
-        }
-
-        override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
-            return RepositoryResult.Success(emptyMap())
-        }
-    }
 
     private class FakeSearchRepository : SearchRepository {
         val history = mutableListOf<Pair<String, String>>()
@@ -89,7 +58,8 @@ class SearchCoordinatorTest {
         override val default: CoroutineDispatcher = dispatcher
     }
 
-    private val fakeMediaRepository = FakeMediaRepository()
+    private lateinit var mockMediaRepository: MediaRepository
+    private lateinit var mockProfileRepository: ProfileRepository
     private val fakeSearchRepository = FakeSearchRepository()
     private val testDispatcher = UnconfinedTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
@@ -98,9 +68,16 @@ class SearchCoordinatorTest {
 
     @Before
     fun setUp() {
+        mockMediaRepository = mockk()
+        mockProfileRepository = mockk()
+
+        // Default mock behavior
+        coEvery { mockProfileRepository.getProfile(any()) } returns RepositoryResult.Failure(AppError.Unknown("Not found"))
+
         searchMediaUseCase = SearchMediaUseCase(
-            mediaRepository = fakeMediaRepository,
+            mediaRepository = mockMediaRepository,
             searchRepository = fakeSearchRepository,
+            profileRepository = mockProfileRepository,
             dispatchers = dispatchers
         )
     }
@@ -149,7 +126,7 @@ class SearchCoordinatorTest {
             )
         )
 
-        fakeMediaRepository.searchResult = RepositoryResult.Success(expectedResults)
+        coEvery { mockMediaRepository.search(any(), any(), any()) } returns RepositoryResult.Success(expectedResults)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
@@ -178,7 +155,7 @@ class SearchCoordinatorTest {
         val profileId = "profile_1"
         val expectedError = AppError.NoNetworkConnection
 
-        fakeMediaRepository.searchResult = RepositoryResult.Failure(expectedError)
+        coEvery { mockMediaRepository.search(any(), any(), any()) } returns RepositoryResult.Failure(expectedError)
 
         coordinator.search(query, profileId)
         advanceUntilIdle()
@@ -206,7 +183,7 @@ class SearchCoordinatorTest {
         val query = "Inception"
         val profileId = "profile_1"
 
-        fakeMediaRepository.searchResult = RepositoryResult.Success(emptyList())
+        coEvery { mockMediaRepository.search(any(), any(), any()) } returns RepositoryResult.Success(emptyList())
 
         coordinator.search(query, profileId)
         advanceUntilIdle()

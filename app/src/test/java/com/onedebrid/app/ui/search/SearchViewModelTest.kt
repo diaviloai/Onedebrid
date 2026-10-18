@@ -3,21 +3,22 @@ package com.onedebrid.app.ui.search
 import com.onedebrid.app.coordinator.SearchCoordinator
 import com.onedebrid.app.coordinator.SearchState
 import com.onedebrid.app.data.repository.MediaRepository
+import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SearchRepository
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.SearchResult
-import com.onedebrid.app.domain.model.StreamCandidate
-import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.usecase.ClearSearchHistoryUseCase
 import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetSearchHistoryUseCase
 import com.onedebrid.app.usecase.SearchMediaUseCase
+import io.mockk.coEvery
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +43,8 @@ class SearchViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
-    private lateinit var fakeMediaRepository: FakeMediaRepository
+    private lateinit var mockMediaRepository: MediaRepository
+    private lateinit var mockProfileRepository: ProfileRepository
     private lateinit var fakeSearchRepository: FakeSearchRepository
     private lateinit var activeProfileFlow: MutableSharedFlow<UserProfile>
 
@@ -53,13 +55,19 @@ class SearchViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
 
-        fakeMediaRepository = FakeMediaRepository()
+        mockMediaRepository = mockk()
+        mockProfileRepository = mockk()
         fakeSearchRepository = FakeSearchRepository()
         activeProfileFlow = MutableSharedFlow()
 
+        // Default mock behavior
+        coEvery { mockProfileRepository.getProfile(any()) } returns RepositoryResult.Failure(AppError.Unknown("Not found"))
+        every { mockProfileRepository.observeActiveProfile() } returns activeProfileFlow
+
         val searchMediaUseCase = SearchMediaUseCase(
-            mediaRepository = fakeMediaRepository,
+            mediaRepository = mockMediaRepository,
             searchRepository = fakeSearchRepository,
+            profileRepository = mockProfileRepository,
             dispatchers = dispatchers
         )
         val coordinatorScope = CoroutineScope(testDispatcher + SupervisorJob())
@@ -71,7 +79,7 @@ class SearchViewModelTest {
         )
 
         val getActiveProfileUseCase = GetActiveProfileUseCase(
-            profileRepository = FakeProfileRepository(activeProfileFlow)
+            profileRepository = mockProfileRepository
         )
         val getSearchHistoryUseCase = GetSearchHistoryUseCase(
             searchRepository = fakeSearchRepository
@@ -121,7 +129,8 @@ class SearchViewModelTest {
                 sourceProvider = "stub"
             )
         )
-        fakeMediaRepository.searchResult = RepositoryResult.Success(expectedResults)
+        
+        coEvery { mockMediaRepository.search(any(), any(), any()) } returns RepositoryResult.Success(expectedResults)
 
         backgroundScope.launch { searchViewModel.uiState.collect {} }
 
@@ -138,7 +147,8 @@ class SearchViewModelTest {
     @Test
     fun `clearSearch resets SearchCoordinator state to Idle`() = runTest(testDispatcher) {
         val testProfile = UserProfile(id = "p1", name = "Test Profile")
-        fakeMediaRepository.searchResult = RepositoryResult.Success(emptyList())
+        
+        coEvery { mockMediaRepository.search(any(), any(), any()) } returns RepositoryResult.Success(emptyList())
 
         backgroundScope.launch { searchViewModel.uiState.collect {} }
 
@@ -160,31 +170,6 @@ class SearchViewModelTest {
         override val default: CoroutineDispatcher = dispatcher
     }
 
-    private class FakeMediaRepository : MediaRepository {
-        var searchResult: RepositoryResult<List<SearchResult>> = RepositoryResult.Success(emptyList())
-
-        override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-
-        override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> =
-            RepositoryResult.Success(emptyList())
-
-        override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-
-        override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> =
-            searchResult
-
-        override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> =
-            RepositoryResult.Success(emptyList())
-
-        override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-
-        override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> =
-            RepositoryResult.Success(emptyMap())
-    }
-
     private class FakeSearchRepository : SearchRepository {
         val historyFlow = MutableSharedFlow<List<String>>()
 
@@ -193,24 +178,5 @@ class SearchViewModelTest {
         override suspend fun addSearchQuery(query: String, profileId: String) {}
         override suspend fun removeSearchQuery(query: String, profileId: String) {}
         override suspend fun clearSearchHistory(profileId: String) {}
-    }
-
-    private class FakeProfileRepository(
-        private val activeProfileFlow: Flow<UserProfile>
-    ) : com.onedebrid.app.data.repository.ProfileRepository {
-        override fun observeProfiles(): Flow<List<UserProfile>> = MutableSharedFlow()
-        override fun observeActiveProfile(): Flow<UserProfile> = activeProfileFlow
-        override suspend fun getProfile(profileId: String): RepositoryResult<UserProfile> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-        override suspend fun getActiveProfile(): RepositoryResult<UserProfile> =
-            RepositoryResult.Failure(AppError.Unknown("Not found"))
-        override suspend fun createProfile(profile: UserProfile): RepositoryResult<UserProfile> =
-            RepositoryResult.Success(profile)
-        override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> =
-            RepositoryResult.Success(profile)
-        override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> =
-            RepositoryResult.Success(Unit)
-        override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> =
-            RepositoryResult.Success(Unit)
     }
 }

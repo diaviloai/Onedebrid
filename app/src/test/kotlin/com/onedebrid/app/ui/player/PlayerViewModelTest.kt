@@ -11,14 +11,10 @@ import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SessionRepository
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.PlaybackRequest
 import com.onedebrid.app.domain.model.PlaybackState as PlayerLifecycleState
-import com.onedebrid.app.domain.model.SearchResult
-import com.onedebrid.app.domain.model.SessionState
-import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.domain.model.UserProfile
 import com.onedebrid.app.domain.model.WatchedItem
@@ -29,6 +25,7 @@ import com.onedebrid.app.usecase.GetActiveProfileUseCase
 import com.onedebrid.app.usecase.GetEpisodeByIdUseCase
 import com.onedebrid.app.usecase.GetMediaByIdUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
@@ -66,26 +63,25 @@ class PlayerViewModelTest {
     private lateinit var savePlaybackPositionUseCase: SavePlaybackPositionUseCase
     private lateinit var endPlaybackSessionUseCase: EndPlaybackSessionUseCase
 
-    private lateinit var fakeMediaRepository: FakeMediaRepository
+    private lateinit var mockMediaRepository: MediaRepository
     private lateinit var fakeProfileRepository: FakeProfileRepository
     private lateinit var fakeSessionRepository: FakeSessionRepository
     private lateinit var fakePlaybackRepository: FakePlaybackRepository
 
     @Before
     fun setup() {
-        // Initialize a fresh dispatcher and scope for EVERY test to prevent cross-test leaks
         testDispatcher = StandardTestDispatcher()
         dispatchers = TestCoroutineDispatchers(testDispatcher)
         Dispatchers.setMain(testDispatcher)
         coordinatorScope = TestScope(testDispatcher)
 
-        fakeMediaRepository = FakeMediaRepository()
+        mockMediaRepository = mockk()
         fakeProfileRepository = FakeProfileRepository()
         fakeSessionRepository = FakeSessionRepository()
         fakePlaybackRepository = FakePlaybackRepository()
 
         resolvePlaybackUseCase = ResolvePlaybackUseCase(
-            mediaRepository = fakeMediaRepository
+            mediaRepository = mockMediaRepository
         )
         startPlaybackSessionUseCase = StartPlaybackSessionUseCase(
             sessionRepository = fakeSessionRepository,
@@ -100,11 +96,10 @@ class PlayerViewModelTest {
             scope = coordinatorScope
         )
 
-        getMediaByIdUseCase = GetMediaByIdUseCase(fakeMediaRepository)
-        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(fakeMediaRepository)
+        getMediaByIdUseCase = GetMediaByIdUseCase(mockMediaRepository)
+        getEpisodeByIdUseCase = GetEpisodeByIdUseCase(mockMediaRepository)
         getActiveProfileUseCase = GetActiveProfileUseCase(fakeProfileRepository)
         
-        // Mock the use case so we don't rely on FakeSessionRepository's internal state
         savePlaybackPositionUseCase = mockk(relaxed = true)
         
         endPlaybackSessionUseCase = EndPlaybackSessionUseCase(fakeSessionRepository, dispatchers)
@@ -119,7 +114,7 @@ class PlayerViewModelTest {
     @Test
     fun `init resolves media and profile successfully`() = runTest(testDispatcher) {
         val media = Media(id = "m1", title = "Test Media", type = MediaType.MOVIE)
-        fakeMediaRepository.mediaResult = RepositoryResult.Success(media)
+        coEvery { mockMediaRepository.getMediaDetails("m1") } returns RepositoryResult.Success(media)
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -156,7 +151,7 @@ class PlayerViewModelTest {
     @Test
     fun `init sets ResolveState Error on media resolution failure`() = runTest(testDispatcher) {
         val expectedError = AppError.Unknown("Media not found")
-        fakeMediaRepository.mediaResult = RepositoryResult.Failure(expectedError)
+        coEvery { mockMediaRepository.getMediaDetails("m1") } returns RepositoryResult.Failure(expectedError)
 
         val savedStateHandle = SavedStateHandle(
             mapOf(
@@ -194,7 +189,7 @@ class PlayerViewModelTest {
     @Test
     fun `onPlayerStateChanged PLAYING starts position saving ticker`() = runTest(testDispatcher) {
         val media = Media(id = "m1", title = "Test Media", type = MediaType.MOVIE)
-        fakeMediaRepository.mediaResult = RepositoryResult.Success(media)
+        coEvery { mockMediaRepository.getMediaDetails("m1") } returns RepositoryResult.Success(media)
 
         val savedStateHandle = SavedStateHandle(mapOf("mediaId" to "m1"))
 
@@ -216,13 +211,11 @@ class PlayerViewModelTest {
             testScheduler.advanceTimeBy(5_001L)
             testScheduler.runCurrent()
 
-            // Verify the use case was called exactly once after 5 seconds
             coVerify(exactly = 1) { savePlaybackPositionUseCase(10_000L, 100_000L) }
 
             testScheduler.advanceTimeBy(5_000L)
             testScheduler.runCurrent()
 
-            // Verify it was called a second time after another 5 seconds
             coVerify(exactly = 2) { savePlaybackPositionUseCase(10_000L, 100_000L) }
 
             viewModel.stop()
@@ -235,7 +228,7 @@ class PlayerViewModelTest {
     @Test
     fun `onPlayerStateChanged PAUSED stops ticker and saves position immediately`() = runTest(testDispatcher) {
         val media = Media(id = "m1", title = "Test Media", type = MediaType.MOVIE)
-        fakeMediaRepository.mediaResult = RepositoryResult.Success(media)
+        coEvery { mockMediaRepository.getMediaDetails("m1") } returns RepositoryResult.Success(media)
 
         val savedStateHandle = SavedStateHandle(mapOf("mediaId" to "m1"))
 
@@ -255,7 +248,6 @@ class PlayerViewModelTest {
             viewModel.onPlayerStateChanged(PlayerLifecycleState.PAUSED, positionMs = 25_000L, durationMs = 100_000L)
             testScheduler.runCurrent()
 
-            // Verify the use case was called immediately upon pausing
             coVerify(exactly = 1) { savePlaybackPositionUseCase(25_000L, 100_000L) }
 
             viewModel.stop()
@@ -268,7 +260,7 @@ class PlayerViewModelTest {
     @Test
     fun `stop stops playback coordinator and ends playback session`() = runTest(testDispatcher) {
         val media = Media(id = "m1", title = "Test Media", type = MediaType.MOVIE)
-        fakeMediaRepository.mediaResult = RepositoryResult.Success(media)
+        coEvery { mockMediaRepository.getMediaDetails("m1") } returns RepositoryResult.Success(media)
 
         val savedStateHandle = SavedStateHandle(mapOf("mediaId" to "m1"))
 
@@ -313,19 +305,6 @@ private class FakeProfileRepository : ProfileRepository {
     override suspend fun updateProfile(profile: UserProfile): RepositoryResult<UserProfile> = RepositoryResult.Success(profile)
     override suspend fun setActiveProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
     override suspend fun deleteProfile(profileId: String): RepositoryResult<Unit> = RepositoryResult.Success(Unit)
-}
-
-private class FakeMediaRepository : MediaRepository {
-    var mediaResult: RepositoryResult<Media> = RepositoryResult.Failure(AppError.Unknown("Not set"))
-    var episodeResult: RepositoryResult<Episode> = RepositoryResult.Failure(AppError.Unknown("Not set"))
-
-    override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> = mediaResult
-    override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> = RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-    override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> = episodeResult
-    override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-    override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> = RepositoryResult.Success(emptyMap())
-    override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> = RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-    override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> = RepositoryResult.Failure(AppError.Unknown("Not implemented"))
 }
 
 private class FakeSessionRepository : SessionRepository {

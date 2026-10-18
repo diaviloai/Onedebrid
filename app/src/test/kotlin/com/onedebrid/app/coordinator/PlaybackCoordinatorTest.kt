@@ -6,11 +6,9 @@ import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SessionRepository
 import com.onedebrid.app.di.CoroutineDispatchers
 import com.onedebrid.app.domain.error.AppError
-import com.onedebrid.app.domain.model.Episode
 import com.onedebrid.app.domain.model.Media
 import com.onedebrid.app.domain.model.MediaType
 import com.onedebrid.app.domain.model.PlaybackRequest
-import com.onedebrid.app.domain.model.SearchResult
 import com.onedebrid.app.domain.model.SessionState
 import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
@@ -19,6 +17,8 @@ import com.onedebrid.app.domain.model.VideoQuality
 import com.onedebrid.app.domain.model.WatchedItem
 import com.onedebrid.app.domain.usecase.StartPlaybackSessionUseCase
 import com.onedebrid.app.usecase.ResolvePlaybackUseCase
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,7 +41,7 @@ class PlaybackCoordinatorTest {
     private val testDispatcher = StandardTestDispatcher()
     private val dispatchers = TestCoroutineDispatchers(testDispatcher)
 
-    private lateinit var fakeMediaRepository: FakeMediaRepository
+    private lateinit var mockMediaRepository: MediaRepository
     private lateinit var fakeSessionRepository: FakeSessionRepository
     private lateinit var fakePlaybackRepository: FakePlaybackRepository
 
@@ -52,11 +52,11 @@ class PlaybackCoordinatorTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-        fakeMediaRepository = FakeMediaRepository()
+        mockMediaRepository = mockk()
         fakeSessionRepository = FakeSessionRepository()
         fakePlaybackRepository = FakePlaybackRepository()
 
-        resolvePlaybackUseCase = ResolvePlaybackUseCase(fakeMediaRepository)
+        resolvePlaybackUseCase = ResolvePlaybackUseCase(mockMediaRepository)
         startPlaybackSessionUseCase = StartPlaybackSessionUseCase(fakeSessionRepository, fakePlaybackRepository, dispatchers)
     }
 
@@ -87,17 +87,18 @@ class PlaybackCoordinatorTest {
             isCached = true
         )
 
-        fakeMediaRepository.resolveStreamResult = RepositoryResult.Success(streamSource)
-        fakeMediaRepository.searchStreamsResult = RepositoryResult.Success(
-            listOf(
-                StreamCandidate(
-                    title = "Mock Stream",
-                    hash = "mock_hash_123",
-                    magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
-                    quality = VideoQuality.HD_1080
-                )
+        val candidates = listOf(
+            StreamCandidate(
+                title = "Mock Stream",
+                hash = "mock_hash_123",
+                magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
+                quality = VideoQuality.HD_1080
             )
         )
+
+        coEvery { mockMediaRepository.searchStreamsByMedia(any(), any()) } returns RepositoryResult.Success(candidates)
+        coEvery { mockMediaRepository.checkCacheStatus(any()) } returns RepositoryResult.Success(mapOf("mock_hash_123" to true))
+        coEvery { mockMediaRepository.resolveStream(any()) } returns RepositoryResult.Success(streamSource)
 
         playbackCoordinator.play(request, profileId = "profile_123")
         advanceUntilIdle()
@@ -122,7 +123,7 @@ class PlaybackCoordinatorTest {
         )
         val expectedError = AppError.NoCachedStreamAvailable
 
-        fakeMediaRepository.searchStreamsResult = RepositoryResult.Failure(expectedError)
+        coEvery { mockMediaRepository.searchStreamsByMedia(any(), any()) } returns RepositoryResult.Failure(expectedError)
 
         playbackCoordinator.play(request, profileId = "profile_123")
         advanceUntilIdle()
@@ -153,50 +154,6 @@ private class TestCoroutineDispatchers(dispatcher: CoroutineDispatcher) : Corout
     override val main: CoroutineDispatcher = dispatcher
     override val io: CoroutineDispatcher = dispatcher
     override val default: CoroutineDispatcher = dispatcher
-}
-
-private class FakeMediaRepository : MediaRepository {
-    var searchStreamsResult: RepositoryResult<List<StreamCandidate>>? = null
-    var resolveStreamResult: RepositoryResult<StreamSource> = RepositoryResult.Failure(AppError.Unknown("Default error"))
-
-    override suspend fun getMediaDetails(mediaId: String): RepositoryResult<Media> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-
-    override suspend fun getEpisodes(mediaId: String): RepositoryResult<List<Episode>> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-
-    override suspend fun getEpisodeById(mediaId: String, episodeId: String): RepositoryResult<Episode> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-
-    override suspend fun resolveStream(candidate: StreamCandidate): RepositoryResult<StreamSource> =
-        resolveStreamResult
-
-    override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): RepositoryResult<Map<String, Boolean>> {
-        val result = mutableMapOf<String, Boolean>()
-        candidates.forEach { candidate ->
-            candidate.magnetUrl?.let { result[it] = true }
-            candidate.hash?.let { result[it] = true }
-            candidate.title.let { result[it] = true }
-        }
-        return RepositoryResult.Success(result)
-    }
-
-    override suspend fun search(query: String, profileId: String): RepositoryResult<List<SearchResult>> =
-        RepositoryResult.Failure(AppError.Unknown("Not implemented"))
-
-    override suspend fun searchStreamsByMedia(media: Media, episode: Episode?): RepositoryResult<List<StreamCandidate>> {
-        searchStreamsResult?.let { return it }
-        return RepositoryResult.Success(
-            listOf(
-                StreamCandidate(
-                    title = "Mock Stream",
-                    hash = "mock_hash_123",
-                    magnetUrl = "magnet:?xt=urn:btih:mock_hash_123",
-                    quality = VideoQuality.HD_1080
-                )
-            )
-        )
-    }
 }
 
 private class FakeSessionRepository : SessionRepository {
