@@ -4,53 +4,51 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class RdUserDto(
-    val id: Long,
-    val username: String,
+    val id: Long? = null,
+    val username: String? = null,
     val email: String? = null,
-    val type: String, // "premium" or "free"
+    val type: String? = null,
     val expiration: String? = null
 )
 
 @Serializable
 data class RdAddMagnetDto(
-    val id: String,
+    val id: String? = null,
     val uri: String? = null
 )
 
 @Serializable
 data class RdTorrentInfoDto(
-    val id: String,
-    val filename: String,
-    val status: String, // e.g. "downloaded", "waiting_files_selection"
+    val id: String? = null,
+    val filename: String? = null,
+    val status: String? = null,
     val bytes: Long? = null,
-    val links: List<String> = emptyList(),
-    val files: List<RdFileDto> = emptyList()
+    val links: List<String>? = null,
+    val files: List<RdFileDto>? = null
 )
 
 @Serializable
 data class RdFileDto(
-    val id: Int,
-    val path: String,
-    val bytes: Long,
-    val selected: Int
+    val id: Int? = null,
+    val path: String? = null,
+    val bytes: Long? = null,
+    val selected: Int? = null
 )
 
 @Serializable
 data class RdUnrestrictUrlDto(
-    val id: String,
-    val filename: String,
+    val id: String? = null,
+    val filename: String? = null,
     val mimeType: String? = null,
     val filesize: Long? = null,
-    val link: String,
+    val link: String? = null,
     val host: String? = null
 )
 
-// A separate, relaxed DTO specifically for the instantAvailability endpoint
 @Serializable
 data class RdInstantFileDto(
     val filename: String? = null,
     val filesize: Long? = null
 )
 
-// Instant availability response: Map<InfoHash, Map<Hoster, List<Map<FileId, FileInfo>>>>
 typealias RdInstantAvailabilityDto = Map<String, Map<String, List<Map<String, RdInstantFileDto>>>>

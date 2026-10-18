@@ -46,41 +46,68 @@ class RealDebridProvider @Inject constructor(
 
     override suspend fun resolveStream(candidate: StreamCandidate): ProviderResult<StreamSource> {
         return try {
-            // 1. Add Magnet
-            val magnet = candidate.magnetUrl ?: "magnet:?xt=urn:btih:${candidate.hash}"
-            val addResponse = api.addMagnet(magnet)
-            val torrentId = addResponse.id
+            val magnetOrLink = candidate.magnetUrl
 
-            // 2. Get Torrent Info
+            // 1. If Torrentio returned a direct HTTP link (e.g. already resolved by a Debrid service)
+            if (magnetOrLink != null && magnetOrLink.startsWith("http")) {
+                val unrestrictResponse = api.unrestrictLink(magnetOrLink)
+                val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
+                
+                return StreamSource(
+                    id = unrestrictResponse.id ?: candidate.hash,
+                    mediaId = "", 
+                    url = finalLink,
+                    quality = candidate.quality,
+                    fileSizeBytes = unrestrictResponse.filesize ?: candidate.sizeBytes ?: 0L,
+                    fileName = unrestrictResponse.filename ?: "video.mp4",
+                    isCached = true
+                ).asSuccess()
+            }
+
+            // 2. Otherwise, it's a magnet link or hash. Add it to Real-Debrid.
+            val magnet = if (magnetOrLink != null && magnetOrLink.startsWith("magnet:")) {
+                magnetOrLink
+            } else {
+                "magnet:?xt=urn:btih:${candidate.hash}"
+            }
+            
+            val addResponse = api.addMagnet(magnet)
+            val torrentId = addResponse.id ?: return ProviderError.NotFound.asFailure()
+
+            // 3. Get Torrent Info
             var infoResponse = api.getTorrentInfo(torrentId)
             
-            // 3. Select Files ONLY if Real-Debrid is waiting for us to do so.
-            // If it's already "downloaded", calling selectFiles will crash with a 400 Bad Request!
+            // 4. Select Files ONLY if Real-Debrid is waiting for us to do so.
             if (infoResponse.status == "waiting_files_selection") {
-                val videoFiles = infoResponse.files.filter { 
-                    it.path.endsWith(".mp4") || it.path.endsWith(".mkv") || it.path.endsWith(".avi") 
+                val allFiles = infoResponse.files ?: emptyList()
+                val videoFiles = allFiles.filter { 
+                    val path = it.path?.lowercase() ?: ""
+                    path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".avi") 
                 }
                 
-                val selectedFile = videoFiles.maxByOrNull { it.bytes } 
+                val selectedFile = videoFiles.maxByOrNull { it.bytes ?: 0L } 
                     ?: return ProviderError.NotFound.asFailure()
 
-                api.selectFiles(torrentId, selectedFile.id.toString())
+                val fileId = selectedFile.id ?: return ProviderError.NotFound.asFailure()
+                api.selectFiles(torrentId, fileId.toString())
                 
                 // Refresh info to get the generated links
                 infoResponse = api.getTorrentInfo(torrentId)
             }
 
-            // 4. Get the generated link
-            val link = infoResponse.links.firstOrNull() 
+            // 5. Get the generated link
+            val links = infoResponse.links ?: emptyList()
+            val link = links.firstOrNull() 
                 ?: return ProviderError.NotFound.asFailure()
 
-            // 5. Unrestrict the link
+            // 6. Unrestrict the link
             val unrestrictResponse = api.unrestrictLink(link)
+            val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
 
             StreamSource(
-                id = unrestrictResponse.id,
-                mediaId = "", // Populated by Repository layer
-                url = unrestrictResponse.link,
+                id = unrestrictResponse.id ?: torrentId,
+                mediaId = "", 
+                url = finalLink,
                 quality = candidate.quality,
                 fileSizeBytes = unrestrictResponse.filesize ?: 0L,
                 fileName = unrestrictResponse.filename ?: "video.mp4",
