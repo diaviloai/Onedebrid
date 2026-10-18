@@ -1,5 +1,6 @@
 package com.onedebrid.app.provider.debrid.realdebrid
 
+import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
@@ -14,7 +15,7 @@ interface RealDebridApi {
     @GET("torrents/instantAvailability/{hashes}")
     suspend fun checkInstantAvailability(
         @Path("hashes") slashSeparatedHashes: String
-    ): RdInstantAvailabilityDto
+    ): JsonElement
 
     @FormUrlEncoded
     @POST("torrents/addMagnet")

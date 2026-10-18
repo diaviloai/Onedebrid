@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -117,6 +118,7 @@ fun DetailsScreen(
                             LazyColumn {
                                 itemsIndexed(state.streams) { index, candidate ->
                                     val isDownloading = state.downloadingHashes.contains(candidate.hash)
+                                    val isCached = state.cachedHashes.contains(candidate.hash)
                                     
                                     Card(
                                         modifier = Modifier
@@ -124,10 +126,24 @@ fun DetailsScreen(
                                             .padding(vertical = 4.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(12.dp)) {
-                                            Text(
-                                                text = candidate.title,
-                                                style = MaterialTheme.typography.bodyLarge
-                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = candidate.title,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                if (isCached) {
+                                                    Text(
+                                                        text = "⚡ Cached",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = Color(0xFF4CAF50) // Green
+                                                    )
+                                                }
+                                            }
+                                            
                                             Text(
                                                 text = candidate.quality.name,
                                                 style = MaterialTheme.typography.bodySmall
@@ -144,7 +160,7 @@ fun DetailsScreen(
                                                         onNavigateToPlayer(
                                                             viewModel.mediaType,
                                                             viewModel.mediaId,
-                                                            null, // episodeId (null for movies)
+                                                            null,
                                                             viewModel.initialResumePositionMs,
                                                             candidate
                                                         )
@@ -153,7 +169,6 @@ fun DetailsScreen(
                                                     Text(if (viewModel.initialResumePositionMs != null) "Resume" else "Play")
                                                 }
 
-                                                // Download Button
                                                 IconButton(
                                                     onClick = { viewModel.downloadStream(candidate) },
                                                     enabled = !isDownloading

@@ -27,7 +27,8 @@ sealed interface DetailsUiState {
         val media: Media,
         val streams: List<StreamCandidate> = emptyList(),
         val isLoadingStreams: Boolean = false,
-        val downloadingHashes: Set<String> = emptySet() // Tracks which streams are currently resolving for download
+        val downloadingHashes: Set<String> = emptySet(),
+        val cachedHashes: Set<String> = emptySet() // Tracks which streams are instantly playable
     ) : DetailsUiState
     data class Error(val message: String) : DetailsUiState
 }
@@ -78,12 +79,28 @@ class DetailsViewModel @Inject constructor(
         viewModelScope.launch(dispatchers.io) {
             when (val result = mediaRepository.searchStreamsByMedia(media, episode)) {
                 is RepositoryResult.Success -> {
+                    val candidates = result.data
                     val currentState = _uiState.value
                     if (currentState is DetailsUiState.Success) {
                         _uiState.value = currentState.copy(
-                            streams = result.data,
+                            streams = candidates,
                             isLoadingStreams = false
                         )
+                        
+                        // Check cache status in the background
+                        val cacheResult = mediaRepository.checkCacheStatus(candidates)
+                        if (cacheResult is RepositoryResult.Success) {
+                            val cachedHashes = cacheResult.data.filterValues { it }.keys
+                            val updatedState = _uiState.value as? DetailsUiState.Success
+                            if (updatedState != null) {
+                                // Sort streams so cached ones appear at the top
+                                val sortedStreams = candidates.sortedByDescending { cachedHashes.contains(it.hash) }
+                                _uiState.value = updatedState.copy(
+                                    streams = sortedStreams,
+                                    cachedHashes = cachedHashes
+                                )
+                            }
+                        }
                     }
                 }
                 is RepositoryResult.Failure -> {
@@ -100,14 +117,7 @@ class DetailsViewModel @Inject constructor(
 
     fun downloadStream(candidate: StreamCandidate) {
         val currentState = _uiState.value as? DetailsUiState.Success ?: return
-        val profileId = getActiveProfileUseCase().let { flow ->
-            // We launch a quick job to grab the profile ID synchronously
-            var id: String? = null
-            viewModelScope.launch { id = flow.firstOrNull()?.id }
-            id
-        }
-
-        // Mark this specific candidate as "resolving" so the UI can show a spinner
+        
         _uiState.value = currentState.copy(
             downloadingHashes = currentState.downloadingHashes + candidate.hash
         )
@@ -115,25 +125,20 @@ class DetailsViewModel @Inject constructor(
         viewModelScope.launch(dispatchers.io) {
             val activeProfile = getActiveProfileUseCase().firstOrNull() ?: return@launch
             
-            // 1. Resolve the stream via Real-Debrid
             when (val result = resolveStreamUseCase(candidate)) {
                 is RepositoryResult.Success -> {
-                    // 2. Queue the download
                     downloadCoordinator.startDownload(
                         media = currentState.media,
                         stream = result.data,
                         profileId = activeProfile.id,
-                        episodeId = null, // TODO: Pass episode ID if TV Show
+                        episodeId = null,
                         seasonNum = null,
                         epNum = null
                     )
                 }
-                is RepositoryResult.Failure -> {
-                    // Handle error (could emit a one-off effect for a Toast here)
-                }
+                is RepositoryResult.Failure -> {}
             }
 
-            // Remove the loading spinner for this candidate
             val updatedState = _uiState.value as? DetailsUiState.Success
             if (updatedState != null) {
                 _uiState.value = updatedState.copy(

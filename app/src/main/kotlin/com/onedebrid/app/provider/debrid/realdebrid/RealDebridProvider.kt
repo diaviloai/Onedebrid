@@ -9,6 +9,7 @@ import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.provider.debrid.DebridProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonObject
 import retrofit2.HttpException
 import javax.inject.Inject
 
@@ -22,23 +23,26 @@ class RealDebridProvider @Inject constructor(
     override suspend fun checkCacheStatus(candidates: List<StreamCandidate>): ProviderResult<Map<String, Boolean>> {
         if (candidates.isEmpty()) return emptyMap<String, Boolean>().asSuccess()
         
-        val hashes = candidates.joinToString("/") { it.hash }
+        // RD allows max 100 hashes per request. Take the first 100 to be safe.
+        val hashes = candidates.take(100).joinToString("/") { it.hash }
         
         return try {
             val response = api.checkInstantAvailability(hashes)
             val resultMap = mutableMapOf<String, Boolean>()
             
-            candidates.forEach { candidate ->
-                val hashData = response[candidate.hash.lowercase()]
-                val isCached = hashData?.isNotEmpty() == true
-                resultMap[candidate.hash] = isCached
+            if (response is JsonObject) {
+                candidates.forEach { candidate ->
+                    val hash = candidate.hash.lowercase()
+                    val hashElement = response[hash]
+                    // If it's a JsonObject, it has hosters (cached). If it's a JsonArray, it's empty (uncached).
+                    val isCached = hashElement is JsonObject && hashElement.isNotEmpty()
+                    resultMap[candidate.hash] = isCached
+                }
             }
             
             resultMap.asSuccess()
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            // If cache check fails (e.g. network error, 401), gracefully return empty map
-            // so the app doesn't crash and just assumes nothing is cached.
             if (e is HttpException && (e.code() == 401 || e.code() == 403)) {
                 return ProviderError.AuthenticationFailed.asFailure()
             }
@@ -50,10 +54,8 @@ class RealDebridProvider @Inject constructor(
         return try {
             val magnetOrLink = candidate.magnetUrl
 
-            // 1. If Torrentio returned a direct HTTP link
             if (magnetOrLink != null && magnetOrLink.startsWith("http")) {
                 if (magnetOrLink.contains("real-debrid.com")) {
-                    // It's an RD link, unrestrict it
                     val unrestrictResponse = api.unrestrictLink(magnetOrLink)
                     val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
                     
@@ -67,7 +69,6 @@ class RealDebridProvider @Inject constructor(
                         isCached = true
                     ).asSuccess()
                 } else {
-                    // It's a direct link from another host (e.g. web seed), just play it directly!
                     return StreamSource(
                         id = candidate.hash,
                         mediaId = "", 
@@ -80,7 +81,6 @@ class RealDebridProvider @Inject constructor(
                 }
             }
 
-            // 2. Otherwise, it's a magnet link or hash. Add it to Real-Debrid.
             val magnet = if (magnetOrLink != null && magnetOrLink.startsWith("magnet:")) {
                 magnetOrLink
             } else {
@@ -90,7 +90,6 @@ class RealDebridProvider @Inject constructor(
             val addResponse = api.addMagnet(magnet)
             val torrentId = addResponse.id ?: return ProviderError.NotFound.asFailure()
 
-            // 3. Get Torrent Info and wait for magnet conversion
             var infoResponse = api.getTorrentInfo(torrentId)
             var attempts = 0
             while (infoResponse.status == "magnet_conversion" && attempts < 10) {
@@ -99,7 +98,6 @@ class RealDebridProvider @Inject constructor(
                 attempts++
             }
             
-            // 4. Select Files ONLY if Real-Debrid is waiting for us to do so.
             if (infoResponse.status == "waiting_files_selection") {
                 val allFiles = infoResponse.files ?: emptyList()
                 val videoFiles = allFiles.filter { 
@@ -107,13 +105,14 @@ class RealDebridProvider @Inject constructor(
                     path.endsWith(".mp4") || path.endsWith(".mkv") || path.endsWith(".avi") 
                 }
                 
+                // Fallback to largest file overall if no standard video extension is found
                 val selectedFile = videoFiles.maxByOrNull { it.bytes ?: 0L } 
+                    ?: allFiles.maxByOrNull { it.bytes ?: 0L }
                     ?: return ProviderError.NotFound.asFailure()
 
                 val fileId = selectedFile.id ?: return ProviderError.NotFound.asFailure()
                 api.selectFiles(torrentId, fileId.toString())
                 
-                // Wait for links to be generated
                 attempts = 0
                 infoResponse = api.getTorrentInfo(torrentId)
                 while (infoResponse.links.isNullOrEmpty() && attempts < 10) {
@@ -123,12 +122,10 @@ class RealDebridProvider @Inject constructor(
                 }
             }
 
-            // 5. Get the generated link
             val links = infoResponse.links ?: emptyList()
             val link = links.firstOrNull() 
                 ?: return ProviderError.NotFound.asFailure()
 
-            // 6. Unrestrict the link
             val unrestrictResponse = api.unrestrictLink(link)
             val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
 
@@ -152,9 +149,6 @@ class RealDebridProvider @Inject constructor(
                 }
             }
             
-            // Catch ALL other exceptions (400, 404, 422, SerializationException, IOException)
-            // and return NotFound so the UI gracefully shows "No cached stream available"
-            // instead of crashing with "Unexpected error".
             ProviderError.NotFound.asFailure()
         }
     }
