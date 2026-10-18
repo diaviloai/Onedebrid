@@ -7,6 +7,7 @@ import com.onedebrid.app.domain.error.asSuccess
 import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.provider.debrid.DebridProvider
+import kotlinx.coroutines.delay
 import kotlinx.serialization.SerializationException
 import okio.IOException
 import retrofit2.HttpException
@@ -48,18 +49,15 @@ class RealDebridProvider @Inject constructor(
         return try {
             val magnetOrLink = candidate.magnetUrl
 
-            // 1. If Torrentio returned a direct HTTP link (e.g. already resolved by a Debrid service)
+            // 1. If Torrentio returned a direct HTTP link, it is already resolved and unrestricted!
             if (magnetOrLink != null && magnetOrLink.startsWith("http")) {
-                val unrestrictResponse = api.unrestrictLink(magnetOrLink)
-                val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
-                
                 return StreamSource(
-                    id = unrestrictResponse.id ?: candidate.hash,
+                    id = candidate.hash,
                     mediaId = "", 
-                    url = finalLink,
+                    url = magnetOrLink,
                     quality = candidate.quality,
-                    fileSizeBytes = unrestrictResponse.filesize ?: candidate.sizeBytes ?: 0L,
-                    fileName = unrestrictResponse.filename ?: "video.mp4",
+                    fileSizeBytes = candidate.sizeBytes ?: 0L,
+                    fileName = "video.mp4",
                     isCached = true
                 ).asSuccess()
             }
@@ -74,8 +72,14 @@ class RealDebridProvider @Inject constructor(
             val addResponse = api.addMagnet(magnet)
             val torrentId = addResponse.id ?: return ProviderError.NotFound.asFailure()
 
-            // 3. Get Torrent Info
+            // 3. Get Torrent Info and wait for magnet conversion
             var infoResponse = api.getTorrentInfo(torrentId)
+            var attempts = 0
+            while (infoResponse.status == "magnet_conversion" && attempts < 10) {
+                delay(1000)
+                infoResponse = api.getTorrentInfo(torrentId)
+                attempts++
+            }
             
             // 4. Select Files ONLY if Real-Debrid is waiting for us to do so.
             if (infoResponse.status == "waiting_files_selection") {
@@ -91,8 +95,14 @@ class RealDebridProvider @Inject constructor(
                 val fileId = selectedFile.id ?: return ProviderError.NotFound.asFailure()
                 api.selectFiles(torrentId, fileId.toString())
                 
-                // Refresh info to get the generated links
+                // Wait for links to be generated
+                attempts = 0
                 infoResponse = api.getTorrentInfo(torrentId)
+                while (infoResponse.links.isNullOrEmpty() && attempts < 10) {
+                    delay(1000)
+                    infoResponse = api.getTorrentInfo(torrentId)
+                    attempts++
+                }
             }
 
             // 5. Get the generated link
@@ -125,7 +135,7 @@ class RealDebridProvider @Inject constructor(
 
     private fun HttpException.toProviderError(): ProviderError = when (code()) {
         401, 403 -> ProviderError.AuthenticationFailed
-        404 -> ProviderError.NotFound
+        400, 404 -> ProviderError.NotFound // 400 Bad Request usually means invalid link or already unrestricted
         429 -> ProviderError.RateLimited(retryAfterSeconds = null)
         in 500..599 -> ProviderError.ServiceUnavailable
         else -> ProviderError.ParsingError(cause = this)

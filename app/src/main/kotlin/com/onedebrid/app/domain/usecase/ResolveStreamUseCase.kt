@@ -12,14 +12,6 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Resolves a playable [StreamSource] for a given [StreamCandidate].
- *
- * Iterates through configured [DebridProvider]s. If a provider fails to
- * resolve a stream or returns an uncached link, the use case gracefully
- * falls back to the next provider until a stream is successfully resolved
- * or all providers are exhausted.
- */
 @Singleton
 class ResolveStreamUseCase @Inject constructor(
     private val providers: Set<@JvmSuppressWildcards DebridProvider>,
@@ -45,13 +37,8 @@ class ResolveStreamUseCase @Inject constructor(
                 }
             }
 
-            RepositoryResult.Failure(
-                if (lastError is AppError.AllProvidersUnavailable) {
-                    AppError.AllProvidersUnavailable
-                } else {
-                    AppError.StreamResolutionFailed
-                }
-            )
+            // Return the actual error instead of masking it
+            RepositoryResult.Failure(lastError)
         }
 
     private fun ProviderError.toAppError(): AppError = when (this) {
