@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
@@ -84,6 +83,9 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val profile = getActiveProfileUseCase().first()
             activeProfileId = profile.id
+            
+            // Expose the profile to the UI so ExoPlayer can read subtitle/audio preferences
+            _uiState.value = _uiState.value.copy(activeProfile = profile)
 
             val mediaResult = getMediaByIdUseCase(mediaId)
             val media = when (mediaResult) {
@@ -213,5 +215,6 @@ sealed interface ResolveState {
 data class PlayerUiState(
     val resolveState: ResolveState = ResolveState.Resolving,
     val coordinatorState: CoordinatorState = CoordinatorState.Idle,
-    val playerLifecycleState: PlayerLifecycleState = PlayerLifecycleState.IDLE
+    val playerLifecycleState: PlayerLifecycleState = PlayerLifecycleState.IDLE,
+    val activeProfile: UserProfile? = null
 )

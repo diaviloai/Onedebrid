@@ -1,6 +1,7 @@
 package com.onedebrid.app.usecase
 
 import com.onedebrid.app.data.repository.MediaRepository
+import com.onedebrid.app.data.repository.ProfileRepository
 import com.onedebrid.app.data.repository.RepositoryResult
 import com.onedebrid.app.data.repository.SearchRepository
 import com.onedebrid.app.di.CoroutineDispatchers
@@ -11,6 +12,7 @@ import javax.inject.Inject
 class SearchMediaUseCase @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val searchRepository: SearchRepository,
+    private val profileRepository: ProfileRepository,
     private val dispatchers: CoroutineDispatchers
 ) {
 
@@ -19,15 +21,20 @@ class SearchMediaUseCase @Inject constructor(
         profileId: String
     ): RepositoryResult<List<SearchResult>> = withContext(dispatchers.io) {
 
-        // Save to history regardless of search outcome.
-        // If the history write fails, swallow the error — a history
-        // persistence failure must never block or fail the search itself.
         try {
             searchRepository.addSearchQuery(profileId, query)
         } catch (e: Exception) {
             // Intentionally ignored.
         }
 
-        mediaRepository.search(query, profileId)
+        // Fetch the profile to check if Adult Content is enabled
+        val profileResult = profileRepository.getProfile(profileId)
+        val includeAdult = if (profileResult is RepositoryResult.Success) {
+            profileResult.data.search.includeAdult
+        } else {
+            false
+        }
+
+        mediaRepository.search(query, profileId, includeAdult)
     }
 }

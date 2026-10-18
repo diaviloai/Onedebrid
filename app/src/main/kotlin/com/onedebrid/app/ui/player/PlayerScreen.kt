@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -50,9 +52,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // 1. Configure ExoPlayer for Debrid/HLS Streaming
     val exoPlayer = remember {
-        // Allow cross-protocol redirects (HTTP -> HTTPS) which Debrid services often use
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10_000)
@@ -61,7 +61,6 @@ fun PlayerScreen(
         val mediaSourceFactory = DefaultMediaSourceFactory(context)
             .setDataSourceFactory(httpDataSourceFactory)
 
-        // Optimize buffer for streaming large files
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 DefaultLoadControl.DEFAULT_MIN_BUFFER_MS,
@@ -77,13 +76,38 @@ fun PlayerScreen(
             .build()
     }
 
-    // Intercept system back gestures to stop playback and end the session before navigating back
+    // Apply Profile Preferences (Subtitles, Audio Language, Auto-Play)
+    LaunchedEffect(uiState.activeProfile, exoPlayer) {
+        uiState.activeProfile?.let { profile ->
+            val trackParams = exoPlayer.trackSelectionParameters.buildUpon()
+
+            // 1. Audio Language
+            if (profile.playback.preferredAudioLanguage.isNotBlank()) {
+                trackParams.setPreferredAudioLanguage(profile.playback.preferredAudioLanguage)
+            }
+
+            // 2. Subtitles
+            if (profile.subtitles.enabled) {
+                if (profile.subtitles.preferredLanguageCode.isNotBlank()) {
+                    trackParams.setPreferredTextLanguage(profile.subtitles.preferredLanguageCode)
+                }
+                trackParams.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            } else {
+                trackParams.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            }
+
+            exoPlayer.trackSelectionParameters = trackParams.build()
+            
+            // 3. Auto-Play
+            exoPlayer.playWhenReady = profile.playback.autoPlay
+        }
+    }
+
     BackHandler {
         viewModel.stop()
         onNavigateBack?.invoke()
     }
 
-    // 2. Lifecycle Awareness: Pause player when app goes to background
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -99,7 +123,6 @@ fun PlayerScreen(
         }
     }
 
-    // Ensures session is stopped when the composable leaves the Composition hierarchy
     DisposableEffect(Unit) {
         onDispose {
             viewModel.stop()
@@ -114,14 +137,12 @@ fun PlayerScreen(
                 val mediaItem = MediaItem.fromUri(coordinatorState.stream.url)
                 exoPlayer.setMediaItem(mediaItem)
                 
-                // 3. Resume Position: Seek to saved progress before preparing
                 val resumeMs = coordinatorState.request.resumePositionMs
                 if (resumeMs != null && resumeMs > 0L) {
                     exoPlayer.seekTo(resumeMs)
                 }
                 
                 exoPlayer.prepare()
-                exoPlayer.playWhenReady = true
                 onDispose { }
             }
         }
@@ -203,7 +224,6 @@ private fun PlayerSurface(exoPlayer: ExoPlayer) {
             PlayerView(context).apply {
                 player = exoPlayer
                 useController = true
-                // 4. Keep Screen On: Prevent device from sleeping during playback
                 keepScreenOn = true 
             }
         }

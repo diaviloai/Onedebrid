@@ -95,10 +95,12 @@ class MediaRepositoryImpl @Inject constructor(
 
     override suspend fun search(
         query: String,
-        profileId: String
+        profileId: String,
+        includeAdult: Boolean
     ): RepositoryResult<List<SearchResult>> =
         withContext(dispatchers.io) {
-            metadataProvider.searchMedia(query)
+            // Pass the includeAdult flag to the MetadataProvider
+            metadataProvider.searchMedia(query, includeAdult)
                 .toRepositoryResult()
                 .let { result ->
                     when (result) {
