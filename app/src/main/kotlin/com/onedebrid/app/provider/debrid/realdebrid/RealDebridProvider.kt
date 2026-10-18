@@ -7,9 +7,8 @@ import com.onedebrid.app.domain.error.asSuccess
 import com.onedebrid.app.domain.model.StreamCandidate
 import com.onedebrid.app.domain.model.StreamSource
 import com.onedebrid.app.provider.debrid.DebridProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.serialization.SerializationException
-import okio.IOException
 import retrofit2.HttpException
 import javax.inject.Inject
 
@@ -36,12 +35,14 @@ class RealDebridProvider @Inject constructor(
             }
             
             resultMap.asSuccess()
-        } catch (e: HttpException) {
-            e.toProviderError().asFailure()
-        } catch (e: IOException) {
-            ProviderError.NetworkError.asFailure()
-        } catch (e: SerializationException) {
-            ProviderError.ParsingError(cause = e).asFailure()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            // If cache check fails (e.g. network error, 401), gracefully return empty map
+            // so the app doesn't crash and just assumes nothing is cached.
+            if (e is HttpException && (e.code() == 401 || e.code() == 403)) {
+                return ProviderError.AuthenticationFailed.asFailure()
+            }
+            emptyMap<String, Boolean>().asSuccess()
         }
     }
 
@@ -49,17 +50,34 @@ class RealDebridProvider @Inject constructor(
         return try {
             val magnetOrLink = candidate.magnetUrl
 
-            // 1. If Torrentio returned a direct HTTP link, it is already resolved and unrestricted!
+            // 1. If Torrentio returned a direct HTTP link
             if (magnetOrLink != null && magnetOrLink.startsWith("http")) {
-                return StreamSource(
-                    id = candidate.hash,
-                    mediaId = "", 
-                    url = magnetOrLink,
-                    quality = candidate.quality,
-                    fileSizeBytes = candidate.sizeBytes ?: 0L,
-                    fileName = "video.mp4",
-                    isCached = true
-                ).asSuccess()
+                if (magnetOrLink.contains("real-debrid.com")) {
+                    // It's an RD link, unrestrict it
+                    val unrestrictResponse = api.unrestrictLink(magnetOrLink)
+                    val finalLink = unrestrictResponse.link ?: return ProviderError.NotFound.asFailure()
+                    
+                    return StreamSource(
+                        id = unrestrictResponse.id ?: candidate.hash,
+                        mediaId = "", 
+                        url = finalLink,
+                        quality = candidate.quality,
+                        fileSizeBytes = unrestrictResponse.filesize ?: candidate.sizeBytes ?: 0L,
+                        fileName = unrestrictResponse.filename ?: "video.mp4",
+                        isCached = true
+                    ).asSuccess()
+                } else {
+                    // It's a direct link from another host (e.g. web seed), just play it directly!
+                    return StreamSource(
+                        id = candidate.hash,
+                        mediaId = "", 
+                        url = magnetOrLink,
+                        quality = candidate.quality,
+                        fileSizeBytes = candidate.sizeBytes ?: 0L,
+                        fileName = "video.mp4",
+                        isCached = true
+                    ).asSuccess()
+                }
             }
 
             // 2. Otherwise, it's a magnet link or hash. Add it to Real-Debrid.
@@ -124,20 +142,20 @@ class RealDebridProvider @Inject constructor(
                 isCached = true
             ).asSuccess()
 
-        } catch (e: HttpException) {
-            e.toProviderError().asFailure()
-        } catch (e: IOException) {
-            ProviderError.NetworkError.asFailure()
-        } catch (e: SerializationException) {
-            ProviderError.ParsingError(cause = e).asFailure()
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            
+            if (e is HttpException) {
+                when (e.code()) {
+                    401, 403 -> return ProviderError.AuthenticationFailed.asFailure()
+                    429 -> return ProviderError.RateLimited(null).asFailure()
+                }
+            }
+            
+            // Catch ALL other exceptions (400, 404, 422, SerializationException, IOException)
+            // and return NotFound so the UI gracefully shows "No cached stream available"
+            // instead of crashing with "Unexpected error".
+            ProviderError.NotFound.asFailure()
         }
-    }
-
-    private fun HttpException.toProviderError(): ProviderError = when (code()) {
-        401, 403 -> ProviderError.AuthenticationFailed
-        400, 404 -> ProviderError.NotFound // 400 Bad Request usually means invalid link or already unrestricted
-        429 -> ProviderError.RateLimited(retryAfterSeconds = null)
-        in 500..599 -> ProviderError.ServiceUnavailable
-        else -> ProviderError.ParsingError(cause = this)
     }
 }
